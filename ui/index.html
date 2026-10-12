@@ -1,0 +1,366 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>NetSwitch</title>
+<style>
+:root{
+  --font:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;
+  --font-d:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI Variable Display","Segoe UI",system-ui,sans-serif;
+  --bg:#f5f5f7; --side:rgba(232,232,237,.82); --group:#ffffff; --fill:rgba(120,120,128,.12); --fill2:rgba(120,120,128,.2);
+  --label:#1d1d1f; --label2:rgba(60,60,67,.62); --label3:rgba(60,60,67,.36); --sep:rgba(60,60,67,.14);
+  --blue:#007aff; --green:#34c759; --red:#ff3b30; --orange:#ff9500; --yellow:#ffcc00; --teal:#30b0c7; --indigo:#5856d6; --purple:#af52de; --pink:#ff2d55; --gray:#8e8e93;
+  --sel:#007aff; --shadow:0 1px 2px rgba(0,0,0,.04),0 0 0 .5px rgba(0,0,0,.04);
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#1c1c1e; --side:rgba(44,44,46,.82); --group:#2c2c2e; --fill:rgba(118,118,128,.24); --fill2:rgba(118,118,128,.36);
+  --label:#f5f5f7; --label2:rgba(235,235,245,.62); --label3:rgba(235,235,245,.32); --sep:rgba(84,84,88,.6);
+  --blue:#0a84ff; --green:#30d158; --red:#ff453a; --orange:#ff9f0a; --yellow:#ffd60a; --teal:#40c8e0; --indigo:#5e5ce6; --purple:#bf5af2; --pink:#ff375f; --gray:#98989d;
+  --sel:#0a84ff; --shadow:none;
+}}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--label);font:13.5px/1.42 var(--font);-webkit-font-smoothing:antialiased;letter-spacing:-.08px}
+::selection{background:color-mix(in srgb,var(--blue) 30%,transparent)}
+::-webkit-scrollbar{width:10px}::-webkit-scrollbar-thumb{background:var(--fill2);border-radius:10px;border:3px solid transparent;background-clip:content-box}
+
+/* ---------- раскладка ---------- */
+.app{display:grid;grid-template-columns:248px 1fr;height:100vh}
+aside{background:var(--side);backdrop-filter:saturate(180%) blur(30px);border-right:.5px solid var(--sep);display:flex;flex-direction:column;min-height:0}
+.brand{display:flex;align-items:center;gap:10px;padding:18px 18px 10px}
+.brand .ic{width:30px;height:30px;border-radius:8px;background:linear-gradient(180deg,#3d9bff,#0062e6);display:grid;place-items:center;box-shadow:0 1px 2px rgba(0,0,0,.2)}
+.brand b{font:600 15px/1.1 var(--font-d);letter-spacing:-.2px}
+.brand small{display:block;color:var(--label2);font-size:11.5px;font-weight:400;margin-top:2px}
+nav{flex:1;overflow:auto;padding:4px 10px 14px}
+nav h6{margin:16px 10px 5px;color:var(--label2);font-size:11px;font-weight:600;letter-spacing:.1px}
+.item{display:flex;align-items:center;gap:10px;height:34px;padding:0 8px;border-radius:7px;cursor:default;color:var(--label)}
+.item:hover{background:var(--fill)}
+.item.sel{background:var(--sel);color:#fff}
+.item.sel .sub,.item.sel .ms{color:rgba(255,255,255,.85)!important}
+.item .nm{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:500}
+.ico{width:22px;height:22px;border-radius:6px;display:grid;place-items:center;flex:none;color:#fff;box-shadow:inset 0 0 0 .5px rgba(0,0,0,.08)}
+.ico svg{width:14px;height:14px}
+.item .ms{font-size:12px;color:var(--label2);font-variant-numeric:tabular-nums}
+.st{width:7px;height:7px;border-radius:50%;flex:none;background:var(--label3)}
+.st.ok{background:var(--green)}.st.bad{background:var(--red)}.st.warn{background:var(--orange)}.st.blue{background:var(--blue)}
+.item.sel .st{box-shadow:0 0 0 1.5px #fff}
+.spin{width:12px;height:12px;border-radius:50%;border:2px solid var(--fill2);border-top-color:var(--blue);animation:r .9s linear infinite;flex:none}
+@keyframes r{to{transform:rotate(360deg)}}
+
+.main{display:flex;flex-direction:column;min-width:0;min-height:0}
+.toolbar{height:52px;display:flex;align-items:center;gap:10px;padding:0 18px;border-bottom:.5px solid var(--sep);background:color-mix(in srgb,var(--bg) 80%,transparent);backdrop-filter:saturate(180%) blur(20px)}
+.capsule{display:flex;align-items:center;gap:8px;height:28px;padding:0 12px;border-radius:14px;background:var(--fill);color:var(--label2);font-size:12.5px;white-space:nowrap;overflow:hidden}
+.capsule b{color:var(--label);font-weight:600}
+.capsule .sepd{width:1px;height:12px;background:var(--sep)}
+.flex{flex:1}
+main{flex:1;overflow:auto;padding:26px 34px 48px}
+.page{max-width:780px;margin:0 auto}
+
+/* ---------- типографика ---------- */
+h1{font:700 26px/1.15 var(--font-d);letter-spacing:-.5px;margin:0}
+.lead{color:var(--label2);margin:6px 0 0;font-size:13.5px}
+.sec{margin:26px 0 7px 14px;color:var(--label2);font-size:12px;font-weight:500;text-transform:uppercase;letter-spacing:.3px}
+.foot{margin:7px 14px 0;color:var(--label2);font-size:12px;line-height:1.45}
+
+/* ---------- сгруппированные списки ---------- */
+.group{background:var(--group);border-radius:12px;box-shadow:var(--shadow);overflow:hidden}
+.row{display:flex;align-items:center;gap:12px;min-height:44px;padding:9px 16px;position:relative}
+.row+.row:before{content:"";position:absolute;top:0;left:16px;right:0;height:.5px;background:var(--sep)}
+.row .k{flex:1;min-width:0}
+.row .k small{display:block;color:var(--label2);font-size:12px;margin-top:1px}
+.row .v{color:var(--label2);font-variant-numeric:tabular-nums;text-align:right}
+.row.col{flex-direction:column;align-items:stretch}
+
+/* ---------- hero ---------- */
+.hero{background:var(--group);border-radius:16px;box-shadow:var(--shadow);padding:22px 22px 20px;margin-top:20px;display:flex;align-items:center;gap:18px}
+.hero .big{width:56px;height:56px;border-radius:14px;display:grid;place-items:center;color:#fff;flex:none}
+.hero .big svg{width:30px;height:30px}
+.hero .t{flex:1;min-width:0}
+.hero .t b{font:600 17px/1.2 var(--font-d);letter-spacing:-.3px;display:flex;align-items:center;gap:8px}
+.hero .t span{color:var(--label2);font-size:13px}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:10px}
+.stat{background:var(--group);border-radius:12px;box-shadow:var(--shadow);padding:12px 14px}
+.stat .l{color:var(--label2);font-size:11.5px;font-weight:500}
+.stat .n{font:600 21px/1.2 var(--font-d);letter-spacing:-.4px;margin-top:3px;font-variant-numeric:tabular-nums}
+.stat .s{color:var(--label2);font-size:11.5px;margin-top:1px}
+
+/* ---------- контролы ---------- */
+button{font:inherit;font-weight:500;border:0;border-radius:7px;padding:5px 13px;min-height:28px;background:var(--fill);color:var(--label);cursor:default;transition:filter .12s,opacity .12s}
+button:hover{filter:brightness(.96)}
+@media (prefers-color-scheme:dark){button:hover{filter:brightness(1.15)}}
+button:active{filter:brightness(.88)}
+button:disabled{opacity:.4;pointer-events:none}
+button.pri{background:var(--blue);color:#fff}
+button.red{color:var(--red)}
+button.redf{background:var(--red);color:#fff}
+button.lg{min-height:34px;padding:7px 20px;border-radius:17px;font-size:14px;font-weight:600}
+button.link{background:none;color:var(--blue);padding:4px 6px}
+button.icon{width:30px;min-height:28px;padding:0;display:grid;place-items:center;background:none;color:var(--label2)}
+button.icon:hover{background:var(--fill)}
+button.icon svg{width:17px;height:17px}
+.btns{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+select,input[type=text],input[type=number],textarea{font:inherit;color:var(--label);background:var(--fill);border:0;border-radius:7px;padding:5px 9px;min-height:28px;outline:none}
+select:focus,input:focus,textarea:focus{box-shadow:0 0 0 3px color-mix(in srgb,var(--blue) 45%,transparent)}
+textarea{width:100%;font:12.5px/1.5 ui-monospace,"SF Mono",Menlo,Consolas,monospace;padding:9px 11px;resize:vertical}
+.sw{position:relative;width:38px;height:22px;flex:none;display:inline-block}
+.sw input{opacity:0;width:0;height:0;position:absolute}
+.sw i{position:absolute;inset:0;border-radius:11px;background:var(--fill2);transition:background .2s}
+.sw i:after{content:"";position:absolute;width:18px;height:18px;left:2px;top:2px;border-radius:50%;background:#fff;box-shadow:0 2px 4px rgba(0,0,0,.2),0 0 0 .5px rgba(0,0,0,.04);transition:transform .22s cubic-bezier(.3,.7,.4,1)}
+.sw input:checked+i{background:var(--green)}
+.sw input:checked+i:after{transform:translateX(16px)}
+.seg{display:inline-flex;background:var(--fill);border-radius:8px;padding:2px;gap:2px}
+.seg button{background:none;min-height:24px;padding:2px 12px;border-radius:6px;font-size:12.5px}
+.seg button.on{background:var(--group);box-shadow:0 1px 3px rgba(0,0,0,.12),0 0 0 .5px rgba(0,0,0,.04)}
+@media (prefers-color-scheme:dark){.seg button.on{background:#636366}}
+.tag{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 9px;border-radius:11px;font-size:12px;font-weight:600;background:var(--fill);color:var(--label2);white-space:nowrap}
+.tag.ok{background:color-mix(in srgb,var(--green) 16%,transparent);color:var(--green)}
+.tag.bad{background:color-mix(in srgb,var(--red) 14%,transparent);color:var(--red)}
+.tag.warn{background:color-mix(in srgb,var(--orange) 16%,transparent);color:var(--orange)}
+.tag.blue{background:color-mix(in srgb,var(--blue) 14%,transparent);color:var(--blue)}
+.c-ok{color:var(--green)}.c-bad{color:var(--red)}.c-warn{color:var(--orange)}
+.good{color:var(--green)}.mid{color:var(--orange)}.slow{color:var(--red)}
+.mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:12.5px}
+.progress{height:4px;border-radius:2px;background:var(--fill);overflow:hidden;margin-top:8px}
+.progress i{display:block;height:100%;background:var(--blue);border-radius:2px;transition:width .3s}
+.best{background:color-mix(in srgb,var(--blue) 7%,transparent)}
+details summary{color:var(--blue);font-size:12px;cursor:default;list-style:none;margin-top:2px}
+details summary::-webkit-details-marker{display:none}
+details .mono{color:var(--label2);margin-top:4px;line-height:1.6}
+.log{font:12px/1.6 ui-monospace,"SF Mono",Menlo,Consolas,monospace;white-space:pre-wrap;color:var(--label2);padding:14px 16px;max-height:calc(100vh - 200px);overflow:auto}
+#toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);opacity:0;pointer-events:none;max-width:520px;background:color-mix(in srgb,var(--group) 88%,transparent);backdrop-filter:saturate(180%) blur(24px);color:var(--label);padding:11px 18px;border-radius:14px;box-shadow:0 10px 40px rgba(0,0,0,.18),0 0 0 .5px var(--sep);transition:.25s;display:flex;gap:9px;align-items:center}
+#toast.show{opacity:1;transform:translateX(-50%)}
+#toast .d{width:8px;height:8px;border-radius:50%;background:var(--red);flex:none}
+#toast.okt .d{background:var(--green)}
+@media (max-width:820px){.stats{grid-template-columns:repeat(2,1fr)}.app{grid-template-columns:210px 1fr}main{padding:20px}}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside>
+    <div class="brand"><div class="ic"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h11l-3-3M17 17H6l3 3"/></svg></div><div><b>NetSwitch</b><small id="ver"></small></div></div>
+    <nav id="nav"></nav>
+  </aside>
+  <div class="main">
+    <div class="toolbar">
+      <div class="capsule" id="pill">Загрузка…</div>
+      <div class="flex"></div>
+      <span style="color:var(--label2);font-size:12.5px" title="Если активный способ перестанет работать — программа сама переключится на самый быстрый рабочий">Авто</span>
+      <label class="sw"><input type="checkbox" id="auto" onchange="saveSet({auto:this.checked})"><i></i></label>
+      <button class="icon" title="Проверить всё" onclick="act('/api/refresh')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg></button>
+      <button class="pri" style="border-radius:14px;padding:4px 14px" onclick="act('/api/fastest',{},'Подключаю самый быстрый…')">Самый быстрый</button>
+    </div>
+    <main><div class="page" id="main"></div></main>
+  </div>
+</div>
+<div id="toast"><span class="d"></span><span id="toastt"></span></div>
+<script>
+const T=new URLSearchParams(location.search).get('t')||'';
+let S=null, tab=localStorage.getItem('tab')||'comss', busyLocal='', selStrat=null, lastRender='';
+
+const I={
+  globe:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.7 3.8 5.7 3.8 9s-1.3 6.3-3.8 9c-2.5-2.7-3.8-5.7-3.8-9S9.5 5.7 12 3z"/></svg>',
+  cloud:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 19a5 5 0 0 1-.6-10A6.5 6.5 0 0 1 19 10.5 4.3 4.3 0 0 1 18 19H7z"/></svg>',
+  shield:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5l-8-3z"/></svg>',
+  gear:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg>',
+  list:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg>',
+  spark:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4z"/></svg>',
+  ad:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/></svg>'
+};
+const PCOL={xbox:'var(--green)',geohide:'var(--indigo)',comss:'var(--blue)',dnsai:'var(--purple)',malw:'var(--pink)',warp:'var(--orange)',cloudflare:'#f38020',google:'var(--teal)',controld:'#5e5ce6',adguard:'#34a853',quad9:'#d0021b'};
+const PICO={warp:'cloud',dnsai:'spark',adguard:'ad',quad9:'shield'};
+const pcol=id=>PCOL[id]||'var(--gray)';
+const pico=id=>I[PICO[id]||'globe'];
+
+async function api(path,body){const r=await fetch(path,{method:'POST',headers:{'X-Token':T,'Content-Type':'application/json'},body:JSON.stringify(body||{})});return r.json()}
+function toast(msg,ok){const t=document.getElementById('toast');document.getElementById('toastt').textContent=msg;t.className='show'+(ok?' okt':'');clearTimeout(t._h);t._h=setTimeout(()=>t.className=ok?'okt':'',ok?2800:6500)}
+async function act(path,body,label){
+  busyLocal=label||'…';render();
+  try{const r=await api(path,body);if(!r.ok)toast(r.error);else if(label)toast('Готово',true)}catch(e){toast('Нет связи с программой')}
+  busyLocal='';await poll();
+}
+async function saveSet(o){const r=await api('/api/settings',{settings:o});if(!r.ok)toast(r.error);await poll()}
+function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function msCls(v){return v==null||v<0?'':v<60?'good':v<150?'mid':'slow'}
+function msTxt(v){return v==null||v<0?'—':v+' мс'}
+function sw(checked,on){return `<label class="sw"><input type="checkbox" ${checked?'checked':''} onchange="${on}"><i></i></label>`}
+
+function provState(p,ps){ // класс статуса
+  if(!ps)return '';
+  if(p.kind==='warp')return !ps.installed?'':ps.connected?(ps.internet?'ok':'bad'):'';
+  if(!ps.alive||!ps.internet)return 'bad';
+  return ps.geo_total&&ps.geo_ok===ps.geo_total?'ok':(ps.geo_ok>0?'warn':'blue');
+}
+
+function navItem(id,name,icon,color,right,stCls,spinning){
+  return `<div class="item ${tab===id?'sel':''}" onclick="go('${id}')"><span class="ico" style="background:${color}">${icon}</span><span class="nm">${esc(name)}</span>${right||''}${spinning?'<span class="spin"></span>':(stCls!==null?`<span class="st ${stCls}"></span>`:'')}</div>`;
+}
+function renderNav(){
+  const a=S.app,c=S.cfg,z=S.zapret;
+  let h='<h6>Подключение</h6>';
+  for(const p of c.providers){if(p.off)continue;
+    const ps=a.provs[p.id];const v=ps?(p.kind==='warp'?ps.ping_ms:ps.dns_ms):-1;
+    const right=a.active===p.id?'<span class="ms" style="color:var(--green);font-weight:600">Вкл</span>':`<span class="ms">${msTxt(v)}</span>`;
+    h+=navItem(p.id,p.name,pico(p.id),pcol(p.id),right,provState(p,ps),ps&&ps.checking);
+  }
+  h+='<h6>Обход DPI</h6>';
+  h+=navItem('zapret','Zapret',I.shield,'var(--green)',z.running?'<span class="ms" style="color:var(--green);font-weight:600">Вкл</span>':`<span class="ms">${z.local_version?esc(z.local_version):''}</span>`,z.running?'ok':(z.installed?'':'bad'),z.test.running);
+  h+='<h6>NetSwitch</h6>';
+  h+=navItem('settings','Настройки',I.gear,'var(--gray)','',null);
+  h+=navItem('log','Журнал',I.list,'var(--gray)','',null);
+  document.getElementById('nav').innerHTML=h;
+  document.getElementById('ver').textContent='Версия '+S.version;
+}
+function renderPill(){
+  const a=S.app;const act=S.cfg.providers.find(p=>p.id===a.active);
+  let h=`<span class="st ${a.internet?'ok':'bad'}"></span><span>${a.internet?'Интернет есть':'Нет интернета'}${a.internet&&a.net_ms?' · '+a.net_ms+' мс':''}</span><span class="sepd"></span><span><b>${act?esc(act.name):'DNS провайдера'}</b>${S.zapret.running?' + zapret':''}</span>`;
+  if(a.loc)h+=`<span class="sepd"></span><span>Страна для сайтов: <b>${esc(a.loc)}</b></span>`;
+  const b=busyLocal||a.busy;if(b)h+=`<span class="sepd"></span><span class="spin"></span><span style="color:var(--blue)">${esc(b)}</span>`;
+  if(!S.admin)h+='<span class="sepd"></span><span class="c-bad">Нет прав администратора</span>';
+  document.getElementById('pill').innerHTML=h;
+  document.getElementById('auto').checked=!!S.cfg.auto;
+}
+
+function renderProvider(p){
+  const a=S.app,ps=a.provs[p.id]||{},isAct=a.active===p.id,busy=!!(busyLocal||a.busy);
+  const cls=provState(p,ps);
+  let st=ps.checking?'Проверка…':(ps.status||'Ещё не проверено');
+  let h=`<h1>${esc(p.name)}</h1><p class="lead">${esc(p.note)}</p>`;
+  h+=`<div class="hero"><div class="big" style="background:${pcol(p.id)}">${pico(p.id)}</div><div class="t"><b>${isAct?'Подключено':'Не подключено'}${isAct?'<span class="tag ok">●</span>':''}</b><span><span class="${cls==='ok'?'c-ok':cls==='bad'?'c-bad':cls==='warn'?'c-warn':''}">${esc(st)}</span>${ps.checked?' · проверено в '+ps.checked:''}</span></div><div class="btns">`;
+  h+=`<button class="icon" title="Проверить" ${ps.checking?'disabled':''} onclick="act('/api/refresh',{id:'${p.id}'})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg></button>`;
+  if(isAct)h+=`<button class="lg" ${busy?'disabled':''} onclick="act('/api/disconnect',{},'Отключаю…')">Отключить</button>`;
+  else h+=`<button class="lg pri" ${busy||(p.kind==='warp'&&ps.installed===false)?'disabled':''} onclick="act('/api/connect',{id:'${p.id}'},'Подключаю ${esc(p.name)}…')">Подключить</button>`;
+  h+='</div></div>';
+
+  const locs=[...new Set((ps.geo||[]).map(g=>g.loc).filter(Boolean))];
+  h+='<div class="stats">';
+  h+=`<div class="stat"><div class="l">Пинг</div><div class="n ${msCls(ps.ping_ms)}">${msTxt(ps.ping_ms)}</div><div class="s">до сервера</div></div>`;
+  if(p.kind==='warp')h+=`<div class="stat"><div class="l">Клиент WARP</div><div class="n" style="font-size:16px;margin-top:6px">${ps.installed?'Установлен':'Не установлен'}</div><div class="s">${esc(ps.status||'')}</div></div>`;
+  else h+=`<div class="stat"><div class="l">Ответ DNS</div><div class="n ${msCls(ps.dns_ms)}">${msTxt(ps.dns_ms)}</div><div class="s">${ps.alive?'сервер отвечает':'нет ответа'}</div></div>`;
+  const noNet=p.kind==='warp'&&!ps.connected;
+  h+=`<div class="stat"><div class="l">Интернет</div><div class="n ${noNet?'':ps.internet?'c-ok':'c-bad'}">${noNet?'—':ps.internet?'Есть':'Нет'}</div><div class="s">${noNet?'после подключения':'через этот способ'}</div></div>`;
+  h+=`<div class="stat"><div class="l">Гео-блоки</div><div class="n">${ps.geo_total?ps.geo_ok+' из '+ps.geo_total:'—'}</div><div class="s">${locs.length?'страна: '+esc(locs.join(', ')):'ChatGPT, Claude'}</div></div>`;
+  h+='</div>';
+
+  if(p.kind==='warp'){
+    h+=`<div class="sec">Клиент</div><div class="group"><div class="row"><div class="k">Cloudflare WARP<small>Программа управляет официальным клиентом через warp-cli</small></div><button onclick="api('/api/open',{url:'https://one.one.one.one/'})">Скачать WARP</button></div></div>
+    <div class="foot">При подключении WARP системный DNS сбрасывается на автоматический — у WARP свой. DNS и WARP взаимоисключающие, а zapret можно держать включённым с любым из них.</div>`;
+  }
+  if(ps.geo&&ps.geo.length){
+    h+='<div class="sec">Сайты с гео-блоком</div><div class="group">';
+    for(const g of ps.geo)h+=`<div class="row"><div class="k">${esc(g.domain)}<small>${g.loc?'видит страну '+esc(g.loc):'—'}${g.ms?' · '+g.ms+' мс':''}</small></div>${g.ok?'<span class="tag ok">Открывается</span>':`<span class="tag bad">${esc(g.err||'Блок по стране')}</span>`}</div>`;
+    h+='</div>';
+  }
+  if(p.kind==='dns'&&ps.ips&&ps.ips.length){
+    h+='<div class="sec">Серверы</div><div class="group">';
+    for(const r of ps.ips){const used=(ps.best||[]).includes(r.ip);
+      h+=`<div class="row"><div class="k mono" style="font-size:13px">${esc(r.ip)}</div><span class="v ${msCls(r.ping_ms)}" style="width:80px">${r.ping_ms<0?'—':'пинг '+r.ping_ms}</span><span class="v ${msCls(r.dns_ms)}" style="width:110px">${r.dns_ms<0?'не отвечает':'DNS '+r.dns_ms+' мс'}</span><span style="width:96px;text-align:right">${used?'<span class="tag blue">Используется</span>':''}</span></div>`;}
+    h+='</div><div class="foot">Два самых быстрых сервера прописываются во все активные адаптеры (Wi‑Fi, Ethernet) для IPv4 и IPv6. Настройка хранится в Windows и работает даже без программы.</div>';
+  }
+  h+='<div class="foot" style="margin-top:18px">Если в браузере включён «Безопасный DNS», выключите его или выберите «Текущий поставщик», иначе браузер не будет использовать DNS из системы.</div>';
+  return h;
+}
+
+function renderZapret(){
+  const z=S.zapret,c=S.cfg,t=z.test,strats=z.strategies||[],svc=z.service_state;
+  if(selStrat===null||!strats.includes(selStrat))selStrat=strats.includes(c.zapret_strategy)?c.zapret_strategy:(strats[0]||'');
+  let h=`<h1>Zapret</h1><p class="lead">Обход замедления и блокировок по DPI (YouTube, Discord и др.) прямо на компьютере, без VPN. Работает вместе с любым DNS.</p>`;
+  // hero
+  let stTxt,stCls='';
+  if(z.running&&svc===4){stTxt='Работает как служба Windows';stCls='c-ok'}
+  else if(z.running){stTxt='Работает';stCls='c-ok'}
+  else if(svc){stTxt='Служба установлена, но остановлена';stCls='c-warn'}
+  else if(!z.installed){stTxt='Не скачан';stCls='c-bad'}
+  else stTxt='Остановлен';
+  h+=`<div class="hero"><div class="big" style="background:var(--green)">${I.shield}</div><div class="t"><b>${z.running?'Включён':'Выключен'}</b><span><span class="${stCls}">${stTxt}</span>${z.running&&(z.service_strategy||c.zapret_strategy)?' · '+esc(svc?z.service_strategy:c.zapret_strategy):''}</span></div><div class="btns">`;
+  if(z.running)h+=`<button class="lg" ${t.running?'disabled':''} onclick="act('/api/zapret/stop',{},'Останавливаю zapret…')">Остановить</button>`;
+  else h+=`<button class="lg pri" ${!z.installed||t.running?'disabled':''} onclick="act('/api/zapret/start',{strategy:selStrat},'Запускаю zapret…')">Запустить</button>`;
+  h+='</div></div>';
+
+  // стратегия
+  const opts=strats.map(s=>`<option ${s===selStrat?'selected':''}>${esc(s)}</option>`).join('');
+  const gf=[['off','Выкл'],['tcp','TCP'],['udp','UDP'],['all','TCP+UDP']].map(([v,n])=>`<button class="${c.game_filter===v?'on':''}" onclick="saveSet({game_filter:'${v}'})">${n}</button>`).join('');
+  h+=`<div class="sec">Параметры</div><div class="group">
+   <div class="row"><div class="k">Стратегия<small>Набор параметров обхода из сборки</small></div><select style="max-width:300px" onchange="selStrat=this.value;this.blur();api('/api/zapret/strategy',{strategy:this.value})" ${strats.length?'':'disabled'}>${opts||'<option>Сначала скачайте zapret</option>'}</select>${z.running&&!svc?`<button onclick="act('/api/zapret/start',{strategy:selStrat},'Перезапуск…')">Применить</button>`:''}</div>
+   <div class="row"><div class="k">Игровой фильтр<small>Обход и для игровых портов 1024–65535</small></div><div class="seg">${gf}</div></div>
+   <div class="row"><div class="k">Запуск вместе с Windows<small>Служба стартует до входа в систему и работает, даже если NetSwitch закрыт</small></div>${svc?`<button class="red" ${t.running?'disabled':''} onclick="act('/api/zapret/service/remove',{},'Удаляю службу…')">Удалить службу</button>`:''}<button ${!z.installed||t.running?'disabled':''} onclick="act('/api/zapret/service/install',{strategy:selStrat},'Устанавливаю службу…')">${svc?'Переустановить':'Установить службу'}</button></div>
+  </div><div class="foot">Без службы zapret работает, пока открыт NetSwitch, и автоматически перезапускается, если упал.${z.other?` <span class="c-warn">Обнаружен другой обход: ${esc(z.other)} — может конфликтовать.</span>`:''}</div>`;
+
+  // версия
+  let vb;
+  if(!z.installed)vb='<span class="tag bad">Не скачан</span>';
+  else if(z.up_to_date)vb='<span class="tag ok">Последняя версия</span>';
+  else if(z.latest_version)vb=`<span class="tag warn">Доступна ${esc(z.latest_version)}</span>`;
+  else vb='<span class="tag">Не проверено</span>';
+  h+=`<div class="sec">Версия</div><div class="group">
+   <div class="row"><div class="k">Установлена</div><span class="v">${z.local_version?esc(z.local_version):'—'}</span></div>
+   <div class="row"><div class="k">Последняя на GitHub</div><span class="v">${z.latest_version?esc(z.latest_version):'—'}</span>${vb}</div>
+   <div class="row col"><div class="btns"><button class="pri" ${z.downloading||t.running?'disabled':''} onclick="act('/api/zapret/download')">Скачать последнюю версию</button><button ${z.downloading?'disabled':''} onclick="act('/api/zapret/check',{},'Проверяю версию…')">Проверить обновления</button><button class="link" onclick="api('/api/zapret/folder')">Открыть папку</button></div>
+   ${z.downloading||z.download_msg?`<div style="color:var(--label2);font-size:12px;margin-top:8px">${esc(z.download_msg)}</div>${z.downloading?`<div class="progress"><i style="width:${z.download_pct||0}%"></i></div>`:''}`:''}</div>
+  </div><div class="foot">Сборка ${esc(c.zapret_repo)}, скачивается в папку программы. Ваши списки *-user.txt при обновлении сохраняются.${z.latest_err&&!z.latest_version?' GitHub: '+esc(z.latest_err):''}</div>`;
+
+  // тест
+  h+=`<div class="sec">Подбор стратегии</div><div class="group"><div class="row"><div class="k">${t.running?`Проверяю <b>${esc(t.current)}</b> · ${t.done} из ${t.total}`:'Тест всех стратегий'}<small>${esc((c.zapret_tests||[]).map(u=>u.replace(/^https?:\/\//,'').split('/')[0]).join(', '))}</small>${t.running?`<div class="progress"><i style="width:${t.total?Math.round(t.done*100/t.total):0}%"></i></div>`:''}</div>
+   ${t.running?`<button class="red" onclick="act('/api/zapret/test/stop')">Остановить</button>`:`<button class="pri" ${!z.installed||z.downloading?'disabled':''} onclick="act('/api/zapret/test')">Начать тест</button>`}</div>`;
+  if(t.finished)h+=`<div class="row"><span class="tag ${t.best?'ok':'warn'}" style="white-space:normal;height:auto;padding:3px 10px">${esc(t.finished)}</span></div>`;
+  for(const r of (t.results||[])){const best=r.name===t.best,base=r.name.startsWith('(');
+    h+=`<div class="row ${best?'best':''}"><div class="k">${best?'<span style="color:var(--orange)">★</span> ':''}${esc(r.name)}<details><summary>Подробнее</summary><div class="mono">${(r.details||[]).map(esc).join('<br>')}</div></details></div>
+    <span class="v" style="width:70px"><b class="${r.ok===r.total?'c-ok':r.ok?'c-warn':'c-bad'}">${r.ok}/${r.total}</b></span><span class="v" style="width:70px">${r.ok?r.avg_ms+' мс':'—'}</span>
+    <span style="width:190px;text-align:right">${base||t.running?'':`<button class="link" onclick="selStrat=this.dataset.s;act('/api/zapret/start',{strategy:this.dataset.s},'Запускаю…')" data-s="${esc(r.name)}">Запустить</button><button class="link" onclick="selStrat=this.dataset.s;act('/api/zapret/service/install',{strategy:this.dataset.s},'Ставлю службу…')" data-s="${esc(r.name)}">Как службу</button>`}</span></div>`;}
+  h+='</div><div class="foot">Каждая стратегия запускается по очереди, затем проверяются сайты. «(без zapret)» — для сравнения. На время теста zapret останавливается, потом всё возвращается как было.</div>';
+  return h;
+}
+
+function renderSettings(){
+  const c=S.cfg,a=S.app;
+  return `<h1>Настройки</h1><p class="lead">Сохраняются в netswitch.json рядом с программой.</p>
+  <div class="sec">Основные</div><div class="group">
+   <div class="row"><div class="k">Запуск вместе с Windows<small>В трее, с правами администратора, без окна UAC</small></div>${sw(a.autostart,'saveSet({autostart:this.checked})')}</div>
+   <div class="row"><div class="k">Авто-режим<small>Переключаться на рабочий способ, если текущий перестал работать</small></div>${sw(c.auto,'saveSet({auto:this.checked})')}</div>
+   <div class="row"><div class="k">Интервал проверки</div><input type="number" min="10" value="${c.auto_interval}" style="width:80px;text-align:right" onchange="saveSet({auto_interval:+this.value})"><span class="v">сек</span></div>
+  </div>
+  <div class="sec">DNS</div><div class="group">
+   <div class="row"><div class="k">Шифрованный DNS (DoH)<small>Windows 11: провайдер не сможет подменить ответы. Применится при следующем подключении</small></div>${sw(c.use_doh,'saveSet({use_doh:this.checked})')}</div>
+   <div class="row"><div class="k">Прописывать IPv6 DNS<small>Чтобы DNS провайдера не использовался через IPv6</small></div>${sw(c.set_ipv6,'saveSet({set_ipv6:this.checked})')}</div>
+   <div class="row"><div class="k">Моя страна<small>Код страны, из которой нужно «выйти»</small></div><input type="text" value="${esc(c.my_country)}" style="width:70px;text-align:center" onchange="saveSet({my_country:this.value.trim().toUpperCase()})"></div>
+   <div class="row col"><div class="k">Сайты для гео-проверки<small>Открывается https://сайт/cdn-cgi/trace (сайты на Cloudflare) — видно, какую страну видит сайт</small></div><input type="text" style="margin-top:8px" value="${esc((c.geo_tests||[]).join(', '))}" onchange="saveSet({geo_tests:this.value.split(',').map(s=>s.trim()).filter(Boolean)})"></div>
+  </div>
+  <div class="sec">Сайты для теста zapret</div><div class="group"><div class="row col"><textarea rows="6" id="zt">${esc((c.zapret_tests||[]).join('\n'))}</textarea><div class="btns" style="margin-top:10px"><button onclick="saveSet({zapret_tests:document.getElementById('zt').value.split('\\n').map(s=>s.trim()).filter(Boolean)}).then(()=>toast('Сохранено',true))">Сохранить</button></div></div></div>
+  <div class="sec">Способы подключения</div><div class="group"><div class="row col"><textarea rows="14" id="pj">${esc(JSON.stringify(c.providers,null,2))}</textarea><div class="btns" style="margin-top:10px"><button class="pri" onclick="saveProv()">Сохранить</button><button onclick="if(confirm('Вернуть стандартный список?'))act('/api/reset-providers',{},'Сброшено')">Стандартный список</button></div></div></div>
+  <div class="foot">Если у сервиса сменились IP — поправьте здесь. "off": true скрывает вкладку. Можно добавить свой DNS.</div>
+  <div class="sec">Сеть сейчас</div><div class="group">
+   <div class="row"><div class="k">Адаптеры</div><span class="v">${esc((a.adapters||[]).join(', ')||'—')}</span></div>
+   <div class="row"><div class="k">DNS в системе</div><span class="v mono">${esc((a.system_dns||[]).join(', ')||'—')}</span></div>
+  </div>
+  <div class="group" style="margin-top:26px"><div class="row"><div class="k">Выйти из NetSwitch<small>Закрытие окна не выключает программу — она остаётся в трее. DNS и служба zapret продолжат работать и после выхода</small></div><button class="redf" onclick="if(confirm('Закрыть NetSwitch?'))api('/api/exit').then(()=>document.body.innerHTML='<p style=&quot;padding:40px;font:15px var(--font)&quot;>NetSwitch закрыт.</p>')">Выйти</button></div></div>`;
+}
+async function saveProv(){let v;try{v=JSON.parse(document.getElementById('pj').value)}catch(e){toast('Ошибка JSON: '+e.message);return}
+  await saveSet({providers:v});toast('Сохранено',true);act('/api/refresh')}
+
+function renderLog(){return `<h1>Журнал</h1><p class="lead">Последние события. Полный журнал — netswitch.log рядом с программой.</p><div class="group" style="margin-top:20px"><div class="log">${esc((S.app.log||[]).slice().reverse().join('\n'))||'Пока пусто'}</div></div>`}
+
+function go(t){tab=t;localStorage.setItem('tab',t);lastRender='';render();document.querySelector('main').scrollTop=0}
+function render(){
+  if(!S)return;
+  renderNav();renderPill();
+  const m=document.getElementById('main'),sc=document.querySelector('main');
+  const ae=document.activeElement;
+  if(ae&&m.contains(ae)&&/^(SELECT|TEXTAREA|INPUT)$/.test(ae.tagName))return;
+  let h;
+  if(tab==='zapret')h=renderZapret();
+  else if(tab==='settings'){if(lastRender==='settings')return;m.innerHTML=renderSettings();lastRender='settings';return}
+  else if(tab==='log')h=renderLog();
+  else{const p=S.cfg.providers.find(p=>p.id===tab&&!p.off)||S.cfg.providers.find(p=>!p.off);if(!p)return;tab=p.id;h=renderProvider(p)}
+  if(h===lastRender)return;
+  const open=[...m.querySelectorAll('details[open]')].map(d=>d.closest('.row')?.querySelector('.k')?.firstChild?.textContent);
+  lastRender=h;const top=sc.scrollTop;m.innerHTML=h;sc.scrollTop=top;
+  if(open.length)m.querySelectorAll('details').forEach(d=>{if(open.includes(d.closest('.row')?.querySelector('.k')?.firstChild?.textContent))d.open=true});
+}
+async function poll(){
+  try{const r=await fetch('/api/state',{method:'POST',headers:{'X-Token':T}});const j=await r.json();if(j.ok){S=j.data;render()}}
+  catch(e){document.getElementById('pill').innerHTML='<span class="st bad"></span><span class="c-bad">Нет связи с NetSwitch — программа закрыта?</span>'}
+}
+poll();setInterval(poll,1500);
+</script>
+</body>
+</html>

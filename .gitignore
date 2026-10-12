@@ -1,0 +1,7 @@
+*.exe
+netswitch.json
+netswitch.log
+zapret/
+zapret_new/
+zapret_old/
+zapret_download.zip
