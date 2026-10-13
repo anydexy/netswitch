@@ -31,6 +31,9 @@ type Settings struct {
 	GeoTests  []string `json:"geo_tests"`  // домены на Cloudflare: проверка через /cdn-cgi/trace
 	NetTest   string   `json:"net_test"`   // проверка интернета
 
+	DNSBypass        []string `json:"dns_bypass"`         // исключения: домены (с поддоменами), которые и при DNS-способе резолвятся через обычный DNS
+	DNSBypassServers []string `json:"dns_bypass_servers"` // через какие серверы
+
 	ZapretRepo     string   `json:"zapret_repo"`
 	ZapretStrategy string   `json:"zapret_strategy"` // имя .bat
 	ZapretWanted   bool     `json:"zapret_wanted"`   // пользователь включил запрет (без службы) — следим, чтобы работал
@@ -105,6 +108,9 @@ func defaultSettings() Settings {
 			"https://x.com/",
 		},
 		TgwsRepo: "Flowseal/tg-ws-proxy",
+		// Comss отдаёт Figma через свой прокси для нейросетей, и она еле грузится, а напрямую доступна
+		DNSBypass:        []string{"figma.com"},
+		DNSBypassServers: []string{"8.8.8.8", "1.1.1.1"},
 	}
 }
 
@@ -124,24 +130,27 @@ func appDir() string {
 func cfgPath() string { return filepath.Join(appDir(), "netswitch.json") }
 
 func loadConfig() {
+	b, _ := os.ReadFile(cfgPath())
+	c := parseConfig(b)
 	cfgMu.Lock()
-	defer cfgMu.Unlock()
-	cfg = defaultSettings()
-	for _, p := range cfg.Providers {
-		cfg.SeenDefaults = append(cfg.SeenDefaults, p.ID)
-	}
-	b, err := os.ReadFile(cfgPath())
-	if err != nil {
-		return
-	}
+	cfg = c
+	cfgMu.Unlock()
+}
+
+// parseConfig — настройки из содержимого netswitch.json (пусто — файла нет) с дополнением
+// полей, появившихся в новых версиях.
+func parseConfig(b []byte) Settings {
+	d := defaultSettings()
 	var c Settings
-	if json.Unmarshal(b, &c) != nil {
-		return
+	if len(b) == 0 || json.Unmarshal(b, &c) != nil {
+		for _, p := range d.Providers {
+			d.SeenDefaults = append(d.SeenDefaults, p.ID)
+		}
+		return d
 	}
 	if len(c.Providers) == 0 {
-		c.Providers = cfg.Providers
+		c.Providers = d.Providers
 	}
-	d := defaultSettings()
 	if c.AutoInterval < 10 {
 		c.AutoInterval = d.AutoInterval
 	}
@@ -166,6 +175,13 @@ func loadConfig() {
 	if c.ZapretTests == nil {
 		c.ZapretTests = d.ZapretTests
 	}
+	if c.DNSBypass == nil { // пустой список — пользователь сам убрал все исключения
+		c.DNSBypass = d.DNSBypass
+	}
+	c.DNSBypass, _ = normDomains(c.DNSBypass)
+	if c.DNSBypassServers = normServers(c.DNSBypassServers); len(c.DNSBypassServers) == 0 {
+		c.DNSBypassServers = d.DNSBypassServers
+	}
 	// добавить новые стандартные способы, появившиеся в обновлении программы
 	seen := map[string]bool{}
 	list := c.SeenDefaults
@@ -186,7 +202,7 @@ func loadConfig() {
 		}
 		c.SeenDefaults = append(c.SeenDefaults, p.ID)
 	}
-	cfg = c
+	return c
 }
 
 func saveConfig() {

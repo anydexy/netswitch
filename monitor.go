@@ -317,6 +317,9 @@ func connect(id string) error {
 	var err error
 	if p.Kind == "warp" {
 		_ = resetSystemDNS()
+		if e := setDNSBypass(nil, nil); e != nil {
+			logf("Исключения DNS: %v", e)
+		}
 		err = warpConnect()
 	} else {
 		warpDisconnect()
@@ -340,6 +343,12 @@ func connect(id string) error {
 			v6 = v6[:2]
 		}
 		err = setSystemDNS(best, v6, p.DoH)
+		if err == nil {
+			c := getCfg()
+			if e := setDNSBypass(c.DNSBypass, c.DNSBypassServers); e != nil {
+				logf("Исключения DNS: %v", e)
+			}
+		}
 	}
 	if err != nil {
 		logf("Ошибка подключения %s: %v", p.Name, err)
@@ -363,6 +372,12 @@ func disconnect() error {
 	defer setBusy("")
 	warpDisconnect()
 	err := resetSystemDNS()
+	if e := setDNSBypass(nil, nil); e != nil {
+		logf("Исключения DNS: %v", e)
+		if err == nil {
+			err = e
+		}
+	}
 	updateCfg(func(c *Settings) { c.Active = "" })
 	stMu.Lock()
 	st.Active = ""
@@ -370,6 +385,17 @@ func disconnect() error {
 	logf("Отключено: DNS снова от провайдера")
 	go refreshSystem()
 	return err
+}
+
+// syncDNSBypass приводит исключения DNS к настройкам: при подключённом DNS-способе ставит их, иначе снимает.
+func syncDNSBypass() error {
+	opMu.Lock()
+	defer opMu.Unlock()
+	c := getCfg()
+	if p, ok := findProvider(snapshot().Active); ok && p.Kind == "dns" {
+		return setDNSBypass(c.DNSBypass, c.DNSBypassServers)
+	}
+	return setDNSBypass(nil, nil)
 }
 
 // score — чем больше, тем лучше: сначала обход гео-блоков, затем наличие интернета, затем скорость.

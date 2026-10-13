@@ -15,7 +15,7 @@ import (
 	"time"
 )
 
-const appVersion = "1.2.0"
+const appVersion = "1.3.0"
 
 //go:embed ui
 var uiFS embed.FS
@@ -126,6 +126,10 @@ func main() {
 			}
 		}
 		refreshAll()
+		// исключения DNS — после обновления программы, правки netswitch.json или смены DNS в обход NetSwitch
+		if err := syncDNSBypass(); err != nil {
+			logf("Исключения DNS: %v", err)
+		}
 		_, _, _ = zapretLatest(false)
 		refreshZapretStatus()
 		_, _, _, _ = tgwsLatest(false)

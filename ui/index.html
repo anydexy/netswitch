@@ -182,6 +182,7 @@ async function act(path,body,label){
   busyLocal='';await poll();
 }
 async function saveSet(o){const r=await api('/api/settings',{settings:o});if(!r.ok)toast(r.error);await poll()}
+async function saveList(el,key){await saveSet({[key]:el.value.split(/[\s,;]+/).filter(Boolean)});el.value=(S.cfg[key]||[]).join(', ')} // показать список так, как его сохранила программа
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function msCls(v){return v==null||v<0?'':v<60?'good':v<150?'mid':'slow'}
 function msTxt(v){return v==null||v<0?'—':v+' мс'}
@@ -370,6 +371,8 @@ function renderSettings(){
    <div class="row"><div class="k">Прописывать IPv6 DNS<small>Чтобы DNS провайдера не использовался через IPv6</small></div>${sw(c.set_ipv6,'saveSet({set_ipv6:this.checked})')}</div>
    <div class="row"><div class="k">Моя страна<small>Код страны, из которой нужно «выйти»</small></div><input type="text" value="${esc(c.my_country)}" style="width:70px;text-align:center" onchange="saveSet({my_country:this.value.trim().toUpperCase()})"></div>
    <div class="row col"><div class="k">Сайты для гео-проверки<small>Открывается https://сайт/cdn-cgi/trace (сайты на Cloudflare) — видно, какую страну видит сайт</small></div><input type="text" style="margin-top:8px" value="${esc((c.geo_tests||[]).join(', '))}" onchange="saveSet({geo_tests:this.value.split(',').map(s=>s.trim()).filter(Boolean)})"></div>
+   <div class="row col"><div class="k">Исключения DNS<small>Эти сайты вместе с поддоменами всегда открываются через обычный DNS, даже когда подключён DNS для обхода. Например, Comss пускает figma.com через свой медленный прокси, хотя напрямую она доступна. Работает через таблицу политик NRPT Windows и применяется сразу. В браузере выключите «Безопасный DNS», иначе исключения не сработают</small></div><input type="text" style="margin-top:8px" placeholder="figma.com, example.com" value="${esc((c.dns_bypass||[]).join(', '))}" onchange="saveList(this,'dns_bypass')"></div>
+   <div class="row"><div class="k">DNS для исключений<small>Обычный DNS без обхода гео-блоков</small></div><input type="text" style="width:200px;text-align:right" value="${esc((c.dns_bypass_servers||[]).join(', '))}" onchange="saveList(this,'dns_bypass_servers')"></div>
   </div>
   <div class="sec">Сайты для теста zapret</div><div class="group"><div class="row col"><textarea rows="6" id="zt">${esc((c.zapret_tests||[]).join('\n'))}</textarea><div class="btns" style="margin-top:10px"><button onclick="saveSet({zapret_tests:document.getElementById('zt').value.split('\\n').map(s=>s.trim()).filter(Boolean)}).then(()=>toast('Сохранено',true))">Сохранить</button></div></div></div>
   <div class="sec">Способы подключения</div><div class="group"><div class="row col"><textarea rows="14" id="pj">${esc(JSON.stringify(c.providers,null,2))}</textarea><div class="btns" style="margin-top:10px"><button class="pri" onclick="saveProv()">Сохранить</button><button onclick="if(confirm('Вернуть стандартный список?'))act('/api/reset-providers',{},'Сброшено')">Стандартный список</button></div></div></div>

@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -77,6 +78,7 @@ func registerAPI(mux *http.ServeMux) {
 			delete(m, "autostart")
 		}
 		var err error
+		var bad []string
 		updateCfg(func(c *Settings) {
 			b, _ := json.Marshal(c)
 			var cur map[string]json.RawMessage
@@ -90,10 +92,33 @@ func registerAPI(mux *http.ServeMux) {
 				if n.AutoInterval < 10 {
 					n.AutoInterval = 10
 				}
+				n.DNSBypass, bad = normDomains(n.DNSBypass)
+				if n.DNSBypassServers = normServers(n.DNSBypassServers); len(n.DNSBypassServers) == 0 {
+					n.DNSBypassServers = defaultSettings().DNSBypassServers
+				}
 				*c = n
 			}
 		})
-		return nil, err
+		if err != nil {
+			return nil, err
+		}
+		_, d1 := m["dns_bypass"]
+		_, d2 := m["dns_bypass_servers"]
+		if d1 || d2 {
+			if err := syncDNSBypass(); err != nil {
+				logf("Исключения DNS: %v", err)
+				return nil, err
+			}
+			if c := getCfg(); len(c.DNSBypass) > 0 {
+				logf("Исключения DNS: %s → %s", strings.Join(c.DNSBypass, ", "), strings.Join(c.DNSBypassServers, ", "))
+			} else {
+				logf("Исключения DNS убраны")
+			}
+		}
+		if d1 && len(bad) > 0 {
+			return nil, fmt.Errorf("Исключения DNS: пропущено «%s» — нужен домен латиницей, например figma.com", strings.Join(bad, "», «"))
+		}
+		return nil, nil
 	})
 	h("/api/reset-providers", func(r apiReq) (any, error) {
 		updateCfg(func(c *Settings) {
