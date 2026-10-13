@@ -27,6 +27,14 @@ func ps(timeout time.Duration, script string) (string, error) {
 	return run(timeout, "powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", full)
 }
 
+// setClipboard кладёт текст (ASCII) в буфер обмена Windows — из окна браузера это может быть запрещено.
+func setClipboard(s string) error {
+	c := exec.Command("clip")
+	hideCmd(c)
+	c.Stdin = strings.NewReader(s)
+	return c.Run()
+}
+
 // psQuote — строка в одинарных кавычках для PowerShell.
 func psQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", "''") + "'" }
 

@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -40,7 +42,7 @@ func registerAPI(mux *http.ServeMux) {
 
 	h("/api/state", func(r apiReq) (any, error) {
 		s := snapshot()
-		return map[string]any{"app": s, "cfg": getCfg(), "zapret": getZapretStatus(), "version": appVersion, "admin": isAdmin()}, nil
+		return map[string]any{"app": s, "cfg": getCfg(), "zapret": getZapretStatus(), "tgws": getTgwsStatus(), "version": appVersion, "admin": isAdmin()}, nil
 	})
 	h("/api/refresh", func(r apiReq) (any, error) {
 		if r.ID != "" {
@@ -203,6 +205,73 @@ func registerAPI(mux *http.ServeMux) {
 	})
 	h("/api/zapret/folder", func(r apiReq) (any, error) {
 		openURL(zapretDir())
+		return nil, nil
+	})
+
+	// --- TG WS Proxy ---
+	h("/api/tgws/check", func(r apiReq) (any, error) {
+		v, _, _, err := tgwsLatest(true)
+		refreshTgwsStatus()
+		return v, err
+	})
+	h("/api/tgws/download", func(r apiReq) (any, error) {
+		if getTgwsStatus().Downloading {
+			return nil, errTgwsBusy
+		}
+		setTDL(true, 0, "Запуск загрузки…")
+		go func() {
+			if err := tgwsDownload(); err != nil {
+				logf("TG WS Proxy: загрузка: %v", err)
+			}
+			refreshTgwsStatus()
+		}()
+		return nil, nil
+	})
+	tgwsOp := func(name string, wanted bool, f func() error) func(r apiReq) (any, error) {
+		return func(r apiReq) (any, error) {
+			if !tBusy.TryLock() {
+				return nil, errTgwsBusy
+			}
+			defer tBusy.Unlock()
+			err := f()
+			if err == nil {
+				updateCfg(func(c *Settings) { c.TgwsWanted = wanted })
+				logf("TG WS Proxy %s", name)
+			}
+			refreshTgwsStatus()
+			updateTray()
+			return nil, err
+		}
+	}
+	h("/api/tgws/start", tgwsOp("запущен", true, tgwsStartProcess))
+	h("/api/tgws/takeover", tgwsOp("запущен из NetSwitch", true, tgwsTakeOver))
+	h("/api/tgws/stop", tgwsOp("остановлен", false, func() error { tgwsStop(); return nil }))
+	h("/api/tgws/telegram", func(r apiReq) (any, error) {
+		l := tgwsLink(readTgwsConf(tgwsDataDir()))
+		if l == "" {
+			return nil, errors.New("сначала запустите TG WS Proxy")
+		}
+		openURL(l)
+		return nil, nil
+	})
+	h("/api/tgws/copy", func(r apiReq) (any, error) {
+		l := tgwsLink(readTgwsConf(tgwsDataDir()))
+		if l == "" {
+			return nil, errors.New("сначала запустите TG WS Proxy")
+		}
+		return nil, setClipboard(l)
+	})
+	h("/api/tgws/folder", func(r apiReq) (any, error) {
+		_ = os.MkdirAll(tgwsDir(), 0755)
+		openURL(tgwsDir())
+		return nil, nil
+	})
+	h("/api/tgws/log", func(r apiReq) (any, error) {
+		p := filepath.Join(tgwsDataDir(), "proxy.log")
+		if _, err := os.Stat(p); err != nil {
+			return nil, errors.New("журнала пока нет — он появится после запуска")
+		}
+		openURL(p)
 		return nil, nil
 	})
 	h("/api/open", func(r apiReq) (any, error) {

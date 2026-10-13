@@ -294,6 +294,9 @@ func updateTray() {
 			color = 0x007aff
 		}
 	}
+	if getTgwsStatus().Running {
+		tip += " + TG WS Proxy"
+	}
 	if !s.Internet {
 		tip += " — нет интернета"
 	}
@@ -474,6 +477,17 @@ func autoLoop() {
 					logf("zapret упал — перезапущен (%s)", c.ZapretStrategy)
 				}
 				zBusy.Unlock()
+			}
+		}
+
+		// TG WS Proxy включён, но процесс умер — перезапустить
+		refreshTgwsStatus()
+		if t := getTgwsStatus(); getCfg().TgwsWanted && t.Installed && !t.Running && t.External == "" && !t.Downloading {
+			if tBusy.TryLock() {
+				if err := tgwsStartProcess(); err == nil {
+					logf("TG WS Proxy упал — перезапущен")
+				}
+				tBusy.Unlock()
 			}
 		}
 

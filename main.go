@@ -15,7 +15,7 @@ import (
 	"time"
 )
 
-const appVersion = "1.1.0"
+const appVersion = "1.2.0"
 
 //go:embed ui
 var uiFS embed.FS
@@ -117,15 +117,26 @@ func main() {
 				logf("zapret запущен (%s)", c.ZapretStrategy)
 			}
 		}
+		refreshTgwsStatus()
+		if t := getTgwsStatus(); c.TgwsWanted && t.Installed && !t.Running && t.External == "" {
+			if err := tgwsStartProcess(); err != nil {
+				logf("TG WS Proxy: %v", err)
+			} else {
+				logf("TG WS Proxy запущен")
+			}
+		}
 		refreshAll()
 		_, _, _ = zapretLatest(false)
 		refreshZapretStatus()
+		_, _, _, _ = tgwsLatest(false)
+		refreshTgwsStatus()
 		updateTray()
 	}()
 	go func() {
 		for {
 			time.Sleep(4 * time.Second)
 			refreshZapretStatus()
+			refreshTgwsStatus()
 		}
 	}()
 	go autoLoop()
@@ -148,6 +159,9 @@ func quit() {
 	z := getZapretStatus()
 	if z.ServiceState == 0 && z.Running && c.ZapretWanted {
 		killWinws() // zapret без службы живёт только вместе с программой
+	}
+	if getTgwsStatus().Running {
+		tgwsStop() // TG WS Proxy тоже
 	}
 	logf("Выход")
 	trayRemove()

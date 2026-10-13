@@ -165,8 +165,10 @@ const I={
   gear:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg>',
   list:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg>',
   spark:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4z"/></svg>',
-  ad:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/></svg>'
+  ad:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/></svg>',
+  plane:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 3 10 14"/><path d="M21 3 14.5 21l-4.5-7-7-4.5z"/></svg>'
 };
+const TGCOL='#2aabee';
 const PCOL={xbox:'var(--green)',geohide:'var(--indigo)',comss:'var(--blue)',dnsai:'var(--purple)',malw:'var(--pink)',warp:'var(--orange)',cloudflare:'#f38020',google:'var(--teal)',controld:'#5e5ce6',adguard:'#34a853',quad9:'#d0021b'};
 const PICO={warp:'cloud',dnsai:'spark',adguard:'ad',quad9:'shield'};
 const pcol=id=>PCOL[id]||'var(--gray)';
@@ -196,15 +198,16 @@ function navItem(id,name,icon,color,right,stCls,spinning){
   return `<div class="item ${tab===id?'sel':''}" onclick="go('${id}')"><span class="ico" style="background:${color}">${icon}</span><span class="nm">${esc(name)}</span>${right||''}${spinning?'<span class="spin"></span>':(stCls!==null?`<span class="st ${stCls}"></span>`:'')}</div>`;
 }
 function renderNav(){
-  const a=S.app,c=S.cfg,z=S.zapret;
+  const a=S.app,c=S.cfg,z=S.zapret,g=S.tgws;
   let h='<h6>Подключение</h6>';
   for(const p of c.providers){if(p.off)continue;
     const ps=a.provs[p.id];const v=ps?(p.kind==='warp'?ps.ping_ms:ps.dns_ms):-1;
     const right=a.active===p.id?'<span class="ms" style="color:var(--green);font-weight:600">Вкл</span>':`<span class="ms">${msTxt(v)}</span>`;
     h+=navItem(p.id,p.name,pico(p.id),pcol(p.id),right,provState(p,ps),ps&&ps.checking);
   }
-  h+='<h6>Обход DPI</h6>';
+  h+='<h6>Обход блокировок</h6>';
   h+=navItem('zapret','Zapret',I.shield,'var(--green)',z.running?'<span class="ms" style="color:var(--green);font-weight:600">Вкл</span>':`<span class="ms">${z.local_version?esc(z.local_version):''}</span>`,z.running?'ok':(z.installed?'':'bad'),z.test.running);
+  h+=navItem('tgws','TG WS Proxy',I.plane,TGCOL,g.running?'<span class="ms" style="color:var(--green);font-weight:600">Вкл</span>':`<span class="ms">${g.external?'отдельно':g.local_version?esc(g.local_version):''}</span>`,g.running?(g.listening?'ok':'warn'):g.external?'warn':(g.installed?'':'bad'),g.downloading);
   h+='<h6>NetSwitch</h6>';
   h+=navItem('settings','Настройки',I.gear,'var(--gray)','',null);
   h+=navItem('log','Журнал',I.list,'var(--gray)','',null);
@@ -213,7 +216,7 @@ function renderNav(){
 }
 function renderPill(){
   const a=S.app;const act=S.cfg.providers.find(p=>p.id===a.active);
-  let h=`<span class="st ${a.internet?'ok':'bad'}"></span><span>${a.internet?'Интернет есть':'Нет интернета'}${a.internet&&a.net_ms?' · '+a.net_ms+' мс':''}</span><span class="sepd"></span><span><b>${act?esc(act.name):'DNS провайдера'}</b>${S.zapret.running?' + zapret':''}</span>`;
+  let h=`<span class="st ${a.internet?'ok':'bad'}"></span><span>${a.internet?'Интернет есть':'Нет интернета'}${a.internet&&a.net_ms?' · '+a.net_ms+' мс':''}</span><span class="sepd"></span><span><b>${act?esc(act.name):'DNS провайдера'}</b>${S.zapret.running?' + zapret':''}${S.tgws.running?' + TG WS Proxy':''}</span>`;
   if(a.loc)h+=`<span class="sepd"></span><span>Страна для сайтов: <b>${esc(a.loc)}</b></span>`;
   const b=busyLocal||a.busy;if(b)h+=`<span class="sepd"></span><span class="spin"></span><span style="color:var(--blue)">${esc(b)}</span>`;
   if(!S.admin)h+='<span class="sepd"></span><span class="c-bad">Нет прав администратора</span>';
@@ -311,6 +314,49 @@ function renderZapret(){
   return h;
 }
 
+function renderTgws(){
+  const g=S.tgws,c=S.cfg,busy=!!busyLocal||g.downloading;
+  let h=`<h1>TG WS Proxy</h1><p class="lead">Ускоряет Telegram Desktop: локальный MTProto-прокси передаёт трафик Telegram через WebSocket к его же серверам. Сторонние серверы не нужны, данные остаются зашифрованными.</p>`;
+  let stTxt,stCls='';
+  if(g.running&&g.listening){stTxt=`Работает · ${esc(g.host)}:${g.port}`;stCls='c-ok'}
+  else if(g.running){stTxt=`Запущен, но порт ${g.port} не отвечает — загляните в журнал прокси`;stCls='c-warn'}
+  else if(g.external){stTxt='Запущен отдельно от NetSwitch: '+esc(g.external);stCls='c-warn'}
+  else if(!g.installed){stTxt='Не скачан';stCls='c-bad'}
+  else stTxt='Остановлен';
+  h+=`<div class="hero"><div class="big" style="background:${TGCOL}">${I.plane}</div><div class="t"><b>${g.running?'Включён':'Выключен'}</b><span class="${stCls}">${stTxt}</span></div><div class="btns">`;
+  if(g.running)h+=`<button class="lg" ${busy?'disabled':''} onclick="act('/api/tgws/stop',{},'Останавливаю TG WS Proxy…')">Остановить</button>`;
+  else if(g.external)h+=`<button class="lg pri" ${!g.installed||busy?'disabled':''} title="${g.installed?'':'Сначала скачайте TG WS Proxy'}" onclick="act('/api/tgws/takeover',{},'Переношу в NetSwitch…')">Перенести в NetSwitch</button>`;
+  else h+=`<button class="lg pri" ${!g.installed||busy?'disabled':''} onclick="act('/api/tgws/start',{},'Запускаю TG WS Proxy…')">Запустить</button>`;
+  h+='</div></div>';
+  if(g.external&&!g.running)h+=`<div class="foot">«Перенести в NetSwitch» закроет отдельный TG WS Proxy, заберёт его настройки и ключ (Telegram перенастраивать не придётся), отключит его автозапуск и запустит прокси из NetSwitch.</div>`;
+
+  // подключение Telegram
+  h+=`<div class="sec">Подключение Telegram</div><div class="group">
+   <div class="row"><div class="k">Добавить прокси в Telegram<small>Telegram Desktop откроет окно прокси — останется нажать «Подключиться». Делается один раз</small></div><button class="pri" ${g.link&&g.running?'':'disabled'} onclick="act('/api/tgws/telegram')">Открыть в Telegram</button><button ${g.link?'':'disabled'} onclick="api('/api/tgws/copy').then(r=>r.ok?toast('Ссылка скопирована',true):toast(r.error),()=>toast('Нет связи с программой'))">Скопировать ссылку</button></div>
+   <div class="row"><div class="k">Вручную<small>Настройки → Продвинутые настройки → Тип подключения → Прокси → MTProto</small></div><span class="v mono">${esc(g.host)} : ${g.port}</span></div>
+   <div class="row"><div class="k">Ключ (secret)</div><span class="v mono" style="user-select:all">${g.secret?'dd'+esc(g.secret):'появится после первого запуска'}</span></div>
+  </div><div class="foot">Не грузятся фото и видео — в настройках самого прокси в поле «DC → IP» оставьте только 4:149.154.167.220 или очистите его. Прокси не работает при включённом IPv6 — в Telegram отключите «Пытаться соединяться через IPv6».</div>`;
+
+  // параметры
+  h+=`<div class="sec">Параметры</div><div class="group">
+   <div class="row"><div class="k">Настройки прокси<small>Порт, DC → IP, Cloudflare-прокси — в окне настроек самого TG WS Proxy: правый клик по его значку в трее → «Настройки…»</small></div><button onclick="act('/api/tgws/log')">Журнал прокси</button><button class="link" onclick="api('/api/tgws/folder')">Открыть папку</button></div>
+  </div><div class="foot">Работает, пока открыт NetSwitch, и перезапускается, если упал. У прокси свой значок в трее; если выйти через него, NetSwitch не будет запускать прокси снова, пока вы не нажмёте «Запустить».</div>`;
+
+  // версия
+  let vb;
+  if(!g.installed)vb='<span class="tag bad">Не скачан</span>';
+  else if(g.up_to_date)vb='<span class="tag ok">Последняя версия</span>';
+  else if(g.latest_version)vb=`<span class="tag warn">Доступна ${esc(g.latest_version)}</span>`;
+  else vb='<span class="tag">Не проверено</span>';
+  h+=`<div class="sec">Версия</div><div class="group">
+   <div class="row"><div class="k">Установлена</div><span class="v">${g.local_version?esc(g.local_version):'—'}</span></div>
+   <div class="row"><div class="k">Последняя на GitHub</div><span class="v">${g.latest_version?esc(g.latest_version):'—'}</span>${vb}</div>
+   <div class="row col"><div class="btns"><button class="pri" ${g.downloading?'disabled':''} onclick="act('/api/tgws/download')">Скачать последнюю версию</button><button ${g.downloading?'disabled':''} onclick="act('/api/tgws/check',{},'Проверяю версию…')">Проверить обновления</button></div>
+   ${g.downloading||g.download_msg?`<div style="color:var(--label2);font-size:12px;margin-top:8px">${esc(g.download_msg)}</div>${g.downloading?`<div class="progress"><i style="width:${g.download_pct||0}%"></i></div>`:''}`:''}</div>
+  </div><div class="foot">Официальная сборка ${esc(c.tgws_repo)} (TgWsProxy_windows.exe), скачивается в папку tgws рядом с программой и проверяется по контрольной сумме с GitHub. Антивирус может ошибочно ругаться на упаковщик — тогда добавьте папку в исключения.${g.latest_err&&!g.latest_version?' GitHub: '+esc(g.latest_err):''}</div>`;
+  return h;
+}
+
 function renderSettings(){
   const c=S.cfg,a=S.app;
   return `<h1>Настройки</h1><p class="lead">Сохраняются в netswitch.json рядом с программой.</p>
@@ -348,6 +394,7 @@ function render(){
   if(ae&&m.contains(ae)&&/^(SELECT|TEXTAREA|INPUT)$/.test(ae.tagName))return;
   let h;
   if(tab==='zapret')h=renderZapret();
+  else if(tab==='tgws')h=renderTgws();
   else if(tab==='settings'){if(lastRender==='settings')return;m.innerHTML=renderSettings();lastRender='settings';return}
   else if(tab==='log')h=renderLog();
   else{const p=S.cfg.providers.find(p=>p.id===tab&&!p.off)||S.cfg.providers.find(p=>!p.off);if(!p)return;tab=p.id;h=renderProvider(p)}

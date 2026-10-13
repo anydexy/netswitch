@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"syscall"
 	"unsafe"
 )
@@ -19,9 +20,10 @@ var (
 	advapi32 = syscall.NewLazyDLL("advapi32.dll")
 	iphlpapi = syscall.NewLazyDLL("iphlpapi.dll")
 
-	procCreateMutexW = kernel32.NewProc("CreateMutexW")
-	procOpenMutexW   = kernel32.NewProc("OpenMutexW")
-	procCloseHandle  = kernel32.NewProc("CloseHandle")
+	procCreateMutexW               = kernel32.NewProc("CreateMutexW")
+	procOpenMutexW                 = kernel32.NewProc("OpenMutexW")
+	procCloseHandle                = kernel32.NewProc("CloseHandle")
+	procQueryFullProcessImageNameW = kernel32.NewProc("QueryFullProcessImageNameW")
 
 	procIsUserAnAdmin = shell32.NewProc("IsUserAnAdmin")
 	procShellExecuteW = shell32.NewProc("ShellExecuteW")
@@ -33,6 +35,12 @@ var (
 	procIcmpCreateFile     = iphlpapi.NewProc("IcmpCreateFile")
 	procIcmpSendEcho       = iphlpapi.NewProc("IcmpSendEcho")
 	procIcmpCloseHandle    = iphlpapi.NewProc("IcmpCloseHandle")
+)
+
+var (
+	procEnumWindows              = user32.NewProc("EnumWindows")
+	procGetClassNameW            = user32.NewProc("GetClassNameW")
+	procGetWindowThreadProcessId = user32.NewProc("GetWindowThreadProcessId")
 )
 
 const createNoWindow = 0x08000000
@@ -70,8 +78,11 @@ func relaunchAsAdmin() error {
 const mutexName = "Local\\NetSwitch-single-instance"
 
 // alreadyRunning — запущен ли уже экземпляр программы (только проверка, мьютекс не создаётся).
-func alreadyRunning() bool {
-	h, _, err := procOpenMutexW.Call(0x00100000, 0, uintptr(unsafe.Pointer(u16(mutexName)))) // SYNCHRONIZE
+func alreadyRunning() bool { return mutexExists(mutexName) }
+
+// mutexExists — существует ли именованный мьютекс (то есть запущена ли программа, которая его держит).
+func mutexExists(name string) bool {
+	h, _, err := procOpenMutexW.Call(0x00100000, 0, uintptr(unsafe.Pointer(u16(name)))) // SYNCHRONIZE
 	if h != 0 {
 		procCloseHandle.Call(h)
 		return true
@@ -80,6 +91,82 @@ func alreadyRunning() bool {
 		return true
 	}
 	return false
+}
+
+// listProcs — все процессы системы (снимок Toolhelp).
+func listProcs() []procEntry {
+	snap, err := syscall.CreateToolhelp32Snapshot(syscall.TH32CS_SNAPPROCESS, 0)
+	if err != nil {
+		return nil
+	}
+	defer syscall.CloseHandle(snap)
+	var pe syscall.ProcessEntry32
+	pe.Size = uint32(unsafe.Sizeof(pe))
+	var r []procEntry
+	for err = syscall.Process32First(snap, &pe); err == nil; err = syscall.Process32Next(snap, &pe) {
+		r = append(r, procEntry{PID: pe.ProcessID, PPID: pe.ParentProcessID, Name: syscall.UTF16ToString(pe.ExeFile[:])})
+	}
+	return r
+}
+
+// procPath — полный путь к exe процесса ("" — нет доступа или процесса).
+func procPath(pid uint32) string {
+	h, err := syscall.OpenProcess(0x1000, false, pid) // PROCESS_QUERY_LIMITED_INFORMATION
+	if err != nil {
+		return ""
+	}
+	defer syscall.CloseHandle(h)
+	buf := make([]uint16, 1024)
+	n := uint32(len(buf))
+	if r, _, _ := procQueryFullProcessImageNameW.Call(uintptr(h), 0, uintptr(unsafe.Pointer(&buf[0])), uintptr(unsafe.Pointer(&n))); r == 0 {
+		return ""
+	}
+	return syscall.UTF16ToString(buf[:n])
+}
+
+func killPID(pid uint32) {
+	h, err := syscall.OpenProcess(syscall.PROCESS_TERMINATE, false, pid)
+	if err != nil {
+		return
+	}
+	_ = syscall.TerminateProcess(h, 1)
+	syscall.CloseHandle(h)
+}
+
+var (
+	enumMu sync.Mutex
+	enumFn func(hwnd uintptr) bool
+	enumCb = syscall.NewCallback(func(hwnd, _ uintptr) uintptr {
+		if enumFn(hwnd) {
+			return 1
+		}
+		return 0
+	})
+)
+
+// postToProcWindows отправляет msg окнам верхнего уровня процессов pids, у которых класс окна
+// начинается с prefix и заканчивается suffix. Возвращает число окон.
+func postToProcWindows(pids map[uint32]bool, prefix, suffix string, msg uint32) int {
+	enumMu.Lock()
+	defer enumMu.Unlock()
+	n := 0
+	buf := make([]uint16, 256)
+	enumFn = func(hwnd uintptr) bool {
+		var pid uint32
+		procGetWindowThreadProcessId.Call(hwnd, uintptr(unsafe.Pointer(&pid)))
+		if !pids[pid] {
+			return true
+		}
+		l, _, _ := procGetClassNameW.Call(hwnd, uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)))
+		cls := syscall.UTF16ToString(buf[:l])
+		if strings.HasPrefix(cls, prefix) && strings.HasSuffix(cls, suffix) {
+			procPostMessageW.Call(hwnd, uintptr(msg), 0, 0)
+			n++
+		}
+		return true
+	}
+	procEnumWindows.Call(enumCb, 0)
+	return n
 }
 
 // claimInstance — занять мьютекс; false, если кто-то успел раньше.

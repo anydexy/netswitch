@@ -410,15 +410,16 @@ func setDL(on bool, pct int, msg string) {
 type progressReader struct {
 	r     io.Reader
 	n, of int64
+	set   func(pct int, msg string)
 }
 
 func (p *progressReader) Read(b []byte) (int, error) {
 	n, err := p.r.Read(b)
 	p.n += int64(n)
 	if p.of > 0 {
-		setDL(true, int(p.n*100/p.of), fmt.Sprintf("Скачивание… %d / %d КБ", p.n/1024, p.of/1024))
+		p.set(int(p.n*100/p.of), fmt.Sprintf("Скачивание… %d / %d КБ", p.n/1024, p.of/1024))
 	} else {
-		setDL(true, 0, fmt.Sprintf("Скачивание… %d КБ", p.n/1024))
+		p.set(0, fmt.Sprintf("Скачивание… %d КБ", p.n/1024))
 	}
 	return n, err
 }
@@ -452,7 +453,8 @@ func zapretDownload() error {
 	if err != nil {
 		return err
 	}
-	_, err = io.Copy(f, &progressReader{r: resp.Body, of: resp.ContentLength})
+	_, err = io.Copy(f, &progressReader{r: resp.Body, of: resp.ContentLength,
+		set: func(pct int, msg string) { setDL(true, pct, msg) }})
 	f.Close()
 	defer os.Remove(tmpZip)
 	if err != nil {

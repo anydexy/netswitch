@@ -37,6 +37,9 @@ type Settings struct {
 	GameFilter     string   `json:"game_filter"`     // off | tcp | udp | all
 	ZapretTests    []string `json:"zapret_tests"`    // URL для теста стратегий
 
+	TgwsRepo   string `json:"tgws_repo"`
+	TgwsWanted bool   `json:"tgws_wanted"` // пользователь включил TG WS Proxy — следим, чтобы работал
+
 	Active string `json:"active"` // id активного способа
 
 	SeenDefaults []string `json:"seen_defaults"` // стандартные способы, которые уже добавлялись (новые в обновлениях добавятся сами)
@@ -101,6 +104,7 @@ func defaultSettings() Settings {
 			"https://www.instagram.com/",
 			"https://x.com/",
 		},
+		TgwsRepo: "Flowseal/tg-ws-proxy",
 	}
 }
 
@@ -149,6 +153,9 @@ func loadConfig() {
 	}
 	if c.ZapretRepo == "" {
 		c.ZapretRepo = d.ZapretRepo
+	}
+	if c.TgwsRepo == "" {
+		c.TgwsRepo = d.TgwsRepo
 	}
 	if c.GameFilter == "" {
 		c.GameFilter = "off"
