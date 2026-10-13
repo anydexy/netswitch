@@ -181,15 +181,46 @@ func cfTrace(c *http.Client, domain string) (string, time.Duration, error) {
 }
 
 // netCheck — есть ли интернет (через указанный DNS или системный).
+// netCheckFallbacks — запасные адреса проверки на других CDN. Узел одного CDN бывает недоступен
+// у провайдера (так бывает с частью адресов Akamai у msftconnecttest, которые отдаёт Comss),
+// и по одному адресу программа ошибочно решала, что интернета нет.
+var netCheckFallbacks = []string{
+	"http://cp.cloudflare.com/generate_204",
+	"http://connectivitycheck.gstatic.com/generate_204",
+}
+
+// netCheck — есть ли интернет (через DNS server или системный): параллельно проверяет net_test
+// и запасные адреса, достаточно одного ответа. Время — самого быстрого.
 func netCheck(server string) (bool, time.Duration) {
-	c := httpClientVia(server, 5*time.Second)
-	start := time.Now()
-	resp, err := c.Get(getCfg().NetTest)
-	if err != nil {
-		return false, 0
+	urls := []string{getCfg().NetTest}
+	for _, u := range netCheckFallbacks {
+		if u != urls[0] {
+			urls = append(urls, u)
+		}
 	}
-	resp.Body.Close()
-	return resp.StatusCode < 500, time.Since(start)
+	type result struct {
+		ok bool
+		dt time.Duration
+	}
+	ch := make(chan result, len(urls))
+	for _, u := range urls {
+		go func(u string) {
+			start := time.Now()
+			resp, err := httpClientVia(server, 5*time.Second).Get(u)
+			if err != nil {
+				ch <- result{}
+				return
+			}
+			resp.Body.Close()
+			ch <- result{resp.StatusCode < 500, time.Since(start)}
+		}(u)
+	}
+	for range urls {
+		if r := <-ch; r.ok {
+			return true, r.dt
+		}
+	}
+	return false, 0
 }
 
 func shortErr(err error) error {

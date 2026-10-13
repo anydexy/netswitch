@@ -15,7 +15,7 @@ import (
 	"time"
 )
 
-const appVersion = "1.3.0"
+const appVersion = "1.3.1"
 
 //go:embed ui
 var uiFS embed.FS
