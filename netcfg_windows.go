@@ -49,8 +49,10 @@ func setSystemDNS(v4, v6 []string, doh string) error {
 				psQuote(a), psQuote(a), psQuote(doh)))
 		}
 	}
-	sb.WriteString(`$n=0; Get-NetAdapter -Physical -ErrorAction SilentlyContinue | Where-Object {$_.Status -eq 'Up'} | ForEach-Object { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ServerAddresses @(` + strings.Join(list, ",") + `) -ErrorAction Stop; $n++ };`)
-	sb.WriteString(`Clear-DnsClientCache; ipconfig /flushdns | Out-Null; Write-Output "OK $n"`)
+	// адаптер бывает подключён, но без настроек DNS (виртуальный, мост) — его пропускаем,
+	// ошибка только если DNS не прописался ни на один
+	sb.WriteString(`$n=0; $e=''; Get-NetAdapter -Physical -ErrorAction SilentlyContinue | Where-Object {$_.Status -eq 'Up'} | ForEach-Object { try { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ServerAddresses @(` + strings.Join(list, ",") + `) -ErrorAction Stop; $n++ } catch { $e = $_.Exception.Message } };`)
+	sb.WriteString(`if ($n -eq 0 -and $e) { Write-Output $e } else { Clear-DnsClientCache; ipconfig /flushdns | Out-Null; Write-Output "OK $n" }`)
 	out, err := ps(40*time.Second, sb.String())
 	if err != nil || !strings.Contains(out, "OK ") {
 		return fmt.Errorf("не удалось прописать DNS: %s", strings.TrimSpace(out))
@@ -63,7 +65,7 @@ func setSystemDNS(v4, v6 []string, doh string) error {
 
 // resetSystemDNS — вернуть DNS "автоматически" (от провайдера/роутера).
 func resetSystemDNS() error {
-	out, err := ps(40*time.Second, `Get-NetAdapter -Physical -ErrorAction SilentlyContinue | Where-Object {$_.Status -eq 'Up'} | ForEach-Object { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ResetServerAddresses }; Clear-DnsClientCache; ipconfig /flushdns | Out-Null; Write-Output OK`)
+	out, err := ps(40*time.Second, `Get-NetAdapter -Physical -ErrorAction SilentlyContinue | Where-Object {$_.Status -eq 'Up'} | ForEach-Object { try { Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ResetServerAddresses -ErrorAction Stop } catch {} }; Clear-DnsClientCache; ipconfig /flushdns | Out-Null; Write-Output OK`)
 	if err != nil || !strings.Contains(out, "OK") {
 		return fmt.Errorf("не удалось сбросить DNS: %s", strings.TrimSpace(out))
 	}
