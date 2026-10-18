@@ -7,7 +7,7 @@ BIN="$1"
 DATA="$HOME/Library/Application Support/NetSwitch"
 rm -rf "$DATA"
 
-sudo "$BIN" --tray --uid "$(id -u)" --gid "$(id -g)" --home "$HOME" >/tmp/netswitch.out 2>&1 &
+sudo env GITHUB_TOKEN="${GITHUB_TOKEN:-}" "$BIN" --tray --uid "$(id -u)" --gid "$(id -g)" --home "$HOME" >/tmp/netswitch.out 2>&1 &
 for i in $(seq 60); do [ -s "$DATA/instance.json" ] && break; sleep 1; done
 URL=$(jq -r .url "$DATA/instance.json")
 BASE=${URL%%/\?*}
@@ -19,7 +19,12 @@ api() {
 	curl -sfS -X POST -H "X-Token: $T" -H 'Content-Type: application/json' -d "$body" "$BASE$1"
 }
 state() { api /api/state | jq "$1"; }
-fail() { echo "::error::$1"; echo "--- netswitch.log"; cat "$DATA/netswitch.log" || true; exit 1; }
+fail() {
+	echo "::error::$1"
+	api /api/state | jq -c '.data | {zapret: .zapret.download_msg, tgws: .tgws.download_msg}' || true
+	echo "--- netswitch.log"; cat "$DATA/netswitch.log" || true
+	exit 1
+}
 wait_for() { # wait_for <jq-условие> <секунд>
 	for i in $(seq "$2"); do [ "$(state "$1")" = true ] && return 0; sleep 1; done
 	fail "не дождались: $1"

@@ -32,14 +32,16 @@ jobs:
           mkdir -p ~/Applications
           cp -R "$RUNNER_TEMP/x/NetSwitch/NetSwitch.app" ~/Applications/
       - name: Обновление
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          LATEST=$(curl -sf https://api.github.com/repos/${{ github.repository }}/releases/latest | jq -r .tag_name | sed 's/^v//')
+          LATEST=$(curl -sf -H "Authorization: Bearer $GITHUB_TOKEN" https://api.github.com/repos/${{ github.repository }}/releases/latest | jq -r .tag_name | sed 's/^v//')
           echo "Последний релиз: $LATEST"
           APP=~/Applications/NetSwitch.app
           BIN=$APP/Contents/MacOS/NetSwitch
           DATA="$HOME/Library/Application Support/NetSwitch"
-          sudo "$BIN" --tray --uid "$(id -u)" --gid "$(id -g)" --home "$HOME" >/tmp/ns.out 2>&1 &
+          sudo env GITHUB_TOKEN="$GITHUB_TOKEN" "$BIN" --tray --uid "$(id -u)" --gid "$(id -g)" --home "$HOME" >/tmp/ns.out 2>&1 &
           for i in $(seq 60); do [ -s "$DATA/instance.json" ] && break; sleep 1; done
           URL=$(jq -r .url "$DATA/instance.json"); BASE=${URL%%/\?*}; T=${URL##*t=}
           api() { curl -sfS -X POST -H "X-Token: $T" -d '{}' "$BASE$1"; }
@@ -76,9 +78,11 @@ jobs:
         run: go build -trimpath -ldflags "-H=windowsgui -s -w -X main.appVersion=$env:FROM" -o C:\e2e\NetSwitch.exe .
       - name: Обновление
         shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           $ErrorActionPreference = 'Stop'
-          $latest = (Invoke-RestMethod "https://api.github.com/repos/${{ github.repository }}/releases/latest").tag_name.TrimStart('v')
+          $latest = (Invoke-RestMethod "https://api.github.com/repos/${{ github.repository }}/releases/latest" -Headers @{ Authorization = "Bearer $env:GITHUB_TOKEN" }).tag_name.TrimStart('v')
           "Последний релиз: $latest"
           Start-Process C:\e2e\NetSwitch.exe -ArgumentList '--tray'
           $inst = "$env:LOCALAPPDATA\NetSwitch\instance.json"

@@ -91,6 +91,19 @@ func versionParts(v string) []int {
 	return r
 }
 
+// githubLatestRequest — запрос последнего релиза репозитория через API GitHub. Без токена GitHub
+// отвечает 60 раз в час с одного адреса; если задан GITHUB_TOKEN (так NetSwitch проверяется в CI,
+// где адрес общий), запрос идёт с ним.
+func githubLatestRequest(repo string) *http.Request {
+	req, _ := http.NewRequest("GET", "https://api.github.com/repos/"+repo+"/releases/latest", nil)
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("User-Agent", "NetSwitch/"+appVersion)
+	if t := os.Getenv("GITHUB_TOKEN"); t != "" {
+		req.Header.Set("Authorization", "Bearer "+t)
+	}
+	return req
+}
+
 // updateCheck узнаёт последнюю версию на GitHub.
 func updateCheck() (UpdateStatus, error) {
 	setUpdate(func(u *UpdateStatus) { u.Checking, u.Err = true, "" })
@@ -103,9 +116,7 @@ func updateCheck() (UpdateStatus, error) {
 	if updateAsset == "" {
 		return fail(errors.New("обновление не поддерживается в этой системе"))
 	}
-	req, _ := http.NewRequest("GET", "https://api.github.com/repos/"+updateRepo+"/releases/latest", nil)
-	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("User-Agent", "NetSwitch/"+appVersion)
+	req := githubLatestRequest(updateRepo)
 	resp, err := httpClientVia("", 12*time.Second).Do(req)
 	if err != nil {
 		return fail(err)

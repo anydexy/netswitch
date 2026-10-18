@@ -38,4 +38,6 @@ jobs:
       - name: Сборка
         run: CGO_ENABLED=0 go build -trimpath -o "$RUNNER_TEMP/NetSwitch" .
       - name: DNS, исключения, zapret, TG WS Proxy
+        env:
+          GITHUB_TOKEN: ${{ github.token }} # у раннеров общий адрес, без токена API GitHub отвечает 403
         run: bash .github/scripts/mac-smoke.sh "$RUNNER_TEMP/NetSwitch"

@@ -356,9 +356,7 @@ func tgwsLatest(force bool) (string, string, string, error) {
 		tMu.Unlock()
 		return "", "", "", err
 	}
-	req, _ := http.NewRequest("GET", "https://api.github.com/repos/"+getCfg().TgwsRepo+"/releases/latest", nil)
-	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("User-Agent", "NetSwitch")
+	req := githubLatestRequest(getCfg().TgwsRepo)
 	resp, err := httpClientVia("", 12*time.Second).Do(req)
 	if err != nil {
 		return fail(err)

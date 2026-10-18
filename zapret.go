@@ -80,9 +80,7 @@ func zapretLatest(force bool) (string, string, error) {
 	zMu.Unlock()
 	repo := zapretRepo()
 	c := httpClientVia("", 12*time.Second)
-	req, _ := http.NewRequest("GET", "https://api.github.com/repos/"+repo+"/releases/latest", nil)
-	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("User-Agent", "NetSwitch")
+	req := githubLatestRequest(repo)
 	var ver, url, sum string
 	resp, err := c.Do(req)
 	if err == nil && resp.StatusCode != 200 {
