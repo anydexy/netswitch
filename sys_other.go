@@ -8,36 +8,40 @@ import (
 	"archive/zip"
 	"errors"
 	"net/http"
+	"net/netip"
 	"os"
 	"os/exec"
 	"path/filepath"
+
+	"github.com/amnezia-vpn/amneziawg-go/tun"
 )
 
 const (
 	zapretSupported = false
 	tgwsAsset       = ""
 	updateAsset     = ""
+	awgTunName      = "netswitch0"
 )
 
 var errUnsupported = errors.New("не поддерживается в этой системе")
 
-func hideCmd(c *exec.Cmd)                             {}
-func isAdmin() bool                                   { return true }
-func relaunchAsAdmin() error                          { return errUnsupported }
-func alreadyRunning() bool                            { return false }
-func claimInstance() bool                             { return true }
-func trayRemove()                                     {}
-func openURL(u string)                                { println("open", u) }
-func openWindow(u string)                             { openURL(u) }
-func serviceState(name string) int                    { return 0 }
-func icmpPing(ip string, t int) (int, error)          { return 0, errors.New("нет ICMP") }
-func runTray(onOpen, onFastest, onOff, onExit func()) {}
-func trayUpdate(color uint32, tip string)             {}
-func trayBalloon(title, text string)                  {}
-func mutexExists(name string) bool                    { return false }
-func listProcs() []procEntry                          { return nil }
-func procPath(pid uint32) string                      { return "" }
-func killPID(pid uint32)                              {}
+func hideCmd(c *exec.Cmd)                           {}
+func isAdmin() bool                                 { return true }
+func relaunchAsAdmin() error                        { return errUnsupported }
+func alreadyRunning() bool                          { return false }
+func claimInstance() bool                           { return true }
+func trayRemove()                                   {}
+func openURL(u string)                              { println("open", u) }
+func openWindow(u string)                           { openURL(u) }
+func serviceState(name string) int                  { return 0 }
+func icmpPing(ip string, t int) (int, error)        { return 0, errors.New("нет ICMP") }
+func runTray(onOpen func(), menu func() []trayItem) {}
+func trayUpdate(color uint32, tip string)           {}
+func trayBalloon(title, text string)                {}
+func mutexExists(name string) bool                  { return false }
+func listProcs() []procEntry                        { return nil }
+func procPath(pid uint32) string                    { return "" }
+func killPID(pid uint32)                            {}
 
 func postToProcWindows(pids map[uint32]bool, prefix, suffix string, msg uint32) int { return 0 }
 
@@ -86,3 +90,8 @@ func zapretTestKill() {}
 func updateApply(z *zip.Reader) error { return errUnsupported }
 func releaseInstance()                {}
 func detachCmd(c *exec.Cmd)           {}
+
+func awgPrepare() error { return errUnsupported }
+func awgRoutesUp(tdev tun.Device, name string, c awgConf, ep netip.AddrPort) (func(), error) {
+	return nil, errUnsupported
+}

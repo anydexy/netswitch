@@ -72,6 +72,7 @@ pgrep -fl tpws
 sudo pfctl -a com.apple/netswitch -s nat
 sudo pfctl -a com.apple/netswitch -s rules
 sudo pfctl -a com.apple/netswitch -s nat | grep -q 'port = 988\|port 988' || fail "нет правил PF"
+sudo pfctl -a com.apple/netswitch -s rules | grep -q 'block drop out quick proto udp' || fail "QUIC не блокируется"
 code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 https://www.youtube.com/)
 echo "youtube через tpws: HTTP $code"
 [ "$code" != 000 ] || fail "сайт не открылся при включённом zapret"
@@ -102,6 +103,27 @@ state '.data.tgws | {running, listening, host, port, link}'
 ps -axo pid,user,comm | grep -i tgwsproxy | grep -v grep || true
 [ "$(state .data.tgws.running)" = true ] || echo "::warning::TG WS Proxy не запустился (на раннере без экрана это возможно)"
 api /api/tgws/stop | jq -c . || true
+
+echo "== WARP (AmneziaWG)"
+before=$(netstat -rn -f inet | grep -c utun || true)
+res=$(api /api/connect '{"id":"warp"}'); echo "$res" | jq -c .
+[ "$(echo "$res" | jq .ok)" = true ] || fail "WARP не подключился: $(echo "$res" | jq -r .error)"
+state '.data.warp'
+[ "$(state '.data.warp.up and .data.warp.handshake >= 0')" = true ] || fail "нет рукопожатия WARP"
+netstat -rn -f inet | grep -E '^(0/1|128.0/1|162\.159)' || true
+trace=$(curl -sS --max-time 20 https://www.cloudflare.com/cdn-cgi/trace)
+echo "$trace" | grep -E '^(ip|loc|warp)='
+echo "$trace" | grep -q '^warp=on' || fail "трафик идёт не через WARP"
+scutil --dns | grep -m2 nameserver
+[ -f "$DATA/warp.conf" ] || fail "нет warp.conf"
+grep -q '^I1 = <b 0x' "$DATA/warp.conf" || fail "в конфиге нет I1"
+api /api/disconnect | jq -c .
+sleep 1
+trace=$(curl -sS --max-time 20 https://www.cloudflare.com/cdn-cgi/trace)
+echo "$trace" | grep -E '^(warp)='
+echo "$trace" | grep -q '^warp=off' || fail "после отключения трафик всё ещё в WARP"
+! netstat -rn -f inet | grep -q '^162\.159\.192\.1 ' || fail "остался маршрут к серверу WARP"
+scutil --dns | grep -m2 nameserver
 
 echo "== выход"
 api /api/exit | jq -c . || true

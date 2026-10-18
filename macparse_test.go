@@ -73,6 +73,12 @@ func TestParseRouteIface(t *testing.T) {
 	if got := parseRouteIface(out); got != "en0" {
 		t.Errorf("parseRouteIface = %q", got)
 	}
+	if got := parseRouteGateway(out); got != "192.168.1.1" {
+		t.Errorf("parseRouteGateway = %q", got)
+	}
+	if got := parseRouteGateway("   route to: default\n  interface: utun4\n"); got != "" {
+		t.Errorf("parseRouteGateway без шлюза = %q", got)
+	}
 }
 
 func TestParsePing(t *testing.T) {
@@ -109,7 +115,7 @@ func TestResolverFile(t *testing.T) {
 
 func TestPFRules(t *testing.T) {
 	r := pfRules(988)
-	for _, s := range []string{"-> 127.0.0.1 port 988", "-> fe80::1 port 988", "user { >root }"} {
+	for _, s := range []string{"-> 127.0.0.1 port 988", "-> fe80::1 port 988", "user { >root }", "block drop out quick proto udp from any to any port 443"} {
 		if !strings.Contains(r, s) {
 			t.Errorf("в правилах PF нет %q:\n%s", s, r)
 		}

@@ -105,6 +105,20 @@ func parseRouteIface(out string) string {
 	return ""
 }
 
+// parseRouteGateway — шлюз маршрута по умолчанию из `route -n get default` ("" — шлюза нет,
+// например маршрут идёт прямо через интерфейс VPN).
+func parseRouteGateway(out string) string {
+	for _, ln := range strings.Split(out, "\n") {
+		t := strings.TrimSpace(ln)
+		if strings.HasPrefix(t, "gateway:") {
+			if ip := net.ParseIP(strings.TrimSpace(t[len("gateway:"):])); ip != nil {
+				return ip.String()
+			}
+		}
+	}
+	return ""
+}
+
 var rePingTime = regexp.MustCompile(`time[=<]([0-9.]+) ms`)
 
 // parsePing — время ответа из `ping -c 1`, мс (не меньше 1).
@@ -164,10 +178,13 @@ func isOurResolver(content string) bool { return strings.HasPrefix(content, reso
 
 // pfRules — правила PF для tpws в прозрачном режиме (docs/bsd.md из zapret): исходящие
 // соединения на 80/443 всех, кроме root, уходят на tpws. Сам tpws работает от root, поэтому
-// его соединения идут напрямую, без петли.
+// его соединения идут напрямую, без петли. QUIC (UDP 443) tpws обработать не может, а браузеры
+// открывают по нему YouTube мимо обхода — пока zapret включён, QUIC блокируется, и браузер
+// переходит на TCP.
 func pfRules(port int) string {
 	return fmt.Sprintf(`rdr pass on lo0 inet proto tcp from !127.0.0.0/8 to any port {80,443} -> 127.0.0.1 port %d
 rdr pass on lo0 inet6 proto tcp from !::1 to any port {80,443} -> fe80::1 port %d
+block drop out quick proto udp from any to any port 443
 pass out route-to (lo0 127.0.0.1) inet proto tcp from any to any port {80,443} user { >root }
 pass out route-to (lo0 fe80::1) inet6 proto tcp from any to any port {80,443} user { >root }
 `, port, port)

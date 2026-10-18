@@ -36,6 +36,10 @@ func zapretRepo() string { return "bol-van/zapret" }
 func tpwsPath() string { return filepath.Join(zapretDir(), "tpws") }
 
 // tpwsStrategies — наборы параметров tpws, из которых выбирают как из .bat-стратегий под Windows.
+// Перебор как у blockcheck из zapret: место разреза запроса (1, 2, начало SNI, середина домена),
+// disorder (первая часть уходит с TTL=1 и доходит повтором — DPI видит части не по порядку),
+// OOB-байт, разбиение ClientHello на две TLS-записи и маленький MSS (сервер шлёт ответ мелкими
+// пакетами). Первые шесть — прежние названия, сохранённые в настройках.
 var tpwsStrategies = []struct {
 	Name string
 	Args []string
@@ -46,6 +50,16 @@ var tpwsStrategies = []struct {
 	{"TLS-записи + disorder", []string{"--tlsrec=sniext+1", "--split-pos=1,midsld", "--disorder"}},
 	{"OOB", []string{"--split-pos=1,midsld", "--oob"}},
 	{"HTTP host + разрез SNI", []string{"--split-pos=method+2,midsld", "--hostcase"}},
+	{"Разрез 1", []string{"--split-pos=1"}},
+	{"Разрез 2 + disorder", []string{"--split-pos=2", "--disorder"}},
+	{"Разрез у SNI", []string{"--split-pos=sniext+1"}},
+	{"Разрез у SNI + disorder", []string{"--split-pos=sniext+1", "--disorder"}},
+	{"Разрез 1 + disorder", []string{"--split-pos=1", "--disorder"}},
+	{"Несколько разрезов + disorder", []string{"--split-pos=1,sniext+1,host+1,midsld", "--disorder"}},
+	{"OOB у SNI", []string{"--split-pos=sniext+1", "--oob"}},
+	{"TLS-записи у SNI", []string{"--tlsrec=sniext"}},
+	{"TLS-записи + OOB", []string{"--tlsrec=sniext+1", "--split-pos=1,midsld", "--oob"}},
+	{"Маленький MSS", []string{"--mss=88", "--split-pos=1,midsld"}},
 }
 
 func tpwsArgs(name string) ([]string, bool) {

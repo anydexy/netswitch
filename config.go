@@ -53,6 +53,9 @@ type Settings struct {
 	SeenDefaults []string `json:"seen_defaults"` // стандартные способы, которые уже добавлялись (новые в обновлениях добавятся сами)
 }
 
+// warpNote — описание WARP; у старых настроек заменяется (раньше нужен был клиент Cloudflare).
+const warpNote = "VPN-туннель Cloudflare через AmneziaWG, встроен в NetSwitch: отдельный клиент не нужен. Работает, пока запущен NetSwitch."
+
 // v1Defaults — способы, которые были в версии 1.0.
 var v1Defaults = []string{"xbox", "geohide", "comss", "malw", "warp", "cloudflare", "google"}
 
@@ -75,7 +78,7 @@ func defaultSettings() Settings {
 			{ID: "malw", Name: "MALW DNS", Kind: "dns", Note: "dns.malw.link — обход гео-блоков",
 				IPv4: []string{"84.21.189.133", "193.23.209.189"},
 				DoH:  "https://dns.malw.link/dns-query"},
-			{ID: "warp", Name: "Cloudflare WARP", Kind: "warp", Note: "VPN-туннель Cloudflare. Нужен установленный клиент WARP (1.1.1.1)."},
+			{ID: "warp", Name: "Cloudflare WARP", Kind: "warp", Note: warpNote},
 			{ID: "cloudflare", Name: "Cloudflare DNS", Kind: "dns", Note: "1.1.1.1 — быстрый обычный DNS (не обходит гео-блоки)",
 				IPv4: []string{"1.1.1.1", "1.0.0.1"},
 				IPv6: []string{"2606:4700:4700::1111", "2606:4700:4700::1001"},
@@ -186,6 +189,11 @@ func parseConfig(b []byte) Settings {
 	}
 	if c.GameFilter == "" {
 		c.GameFilter = "off"
+	}
+	for i := range c.Providers {
+		if c.Providers[i].Kind == "warp" {
+			c.Providers[i].Note = warpNote
+		}
 	}
 	if c.UITheme != "light" && c.UITheme != "dark" {
 		c.UITheme = "auto"

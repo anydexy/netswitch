@@ -16,7 +16,7 @@ import (
 
 // appVersion — переменная, чтобы для проверки обновления можно было собрать «старую» версию:
 // go build -ldflags "-X main.appVersion=1.0.0".
-var appVersion = "1.4.2"
+var appVersion = "1.5.0"
 
 //go:embed ui
 var uiFS embed.FS
@@ -109,21 +109,15 @@ func main() {
 	srv := &http.Server{Handler: guard(mux, ln.Addr().String()), ReadHeaderTimeout: 10 * time.Second}
 	go func() { _ = srv.Serve(ln) }()
 
-	go runTray(
-		func() { openWindow(baseURL) },
-		func() {
-			if err := connectFastest(); err != nil {
-				trayBalloon("NetSwitch", err.Error())
-			} else {
-				trayBalloon("NetSwitch", "Подключено: "+activeName())
-			}
-		},
-		func() { _ = disconnect() },
-		quit,
-	)
+	go runTray(func() { openWindow(baseURL) }, trayMenu)
 
 	// Начальные проверки
 	go func() {
+		if getCfg().Active == "warp" { // туннель WARP живёт вместе с программой — поднять снова
+			if err := connect("warp"); err != nil {
+				logf("WARP: %v", err)
+			}
+		}
 		refreshZapretStatus()
 		c := getCfg()
 		z := getZapretStatus()
@@ -183,6 +177,7 @@ func activeName() string {
 }
 
 func quit() {
+	warpDisconnect() // туннель WARP живёт вместе с программой
 	c := getCfg()
 	z := getZapretStatus()
 	if z.ServiceState == 0 && z.Running && c.ZapretWanted {

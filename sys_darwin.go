@@ -258,9 +258,9 @@ func postToProcWindows(pids map[uint32]bool, prefix, suffix string, msg uint32) 
 }
 
 // Значка в строке меню нет (для него нужен cgo): окно снова открывается запуском NetSwitch.
-func runTray(onOpen, onFastest, onOff, onExit func()) {}
-func trayRemove()                                     {}
-func trayUpdate(color uint32, tip string)             {}
+func runTray(onOpen func(), menu func() []trayItem) {}
+func trayRemove()                                   {}
+func trayUpdate(color uint32, tip string)           {}
 
 func trayBalloon(title, text string) {
 	_ = startDetached(runAsUser("/usr/bin/osascript", "-e",

@@ -95,7 +95,8 @@ var (
 	trayNid     notifyIconData
 	trayReady   bool
 	trayIcon    uintptr
-	trayCbs     [4]func()
+	trayOpen    func()
+	trayMenuFn  func() []trayItem
 	taskbarMsg  uintptr
 	trayPending struct {
 		color uint32
@@ -148,8 +149,8 @@ func trayWndProc(hwnd, msg, wParam, lParam uintptr) uintptr {
 	case msg == wmTray:
 		switch lParam & 0xFFFF {
 		case 0x202, 0x203: // WM_LBUTTONUP, WM_LBUTTONDBLCLK
-			if trayCbs[0] != nil {
-				go trayCbs[0]()
+			if trayOpen != nil {
+				go trayOpen()
 			}
 		case 0x205: // WM_RBUTTONUP
 			showTrayMenu(hwnd)
@@ -187,33 +188,43 @@ func trayWndProc(hwnd, msg, wParam, lParam uintptr) uintptr {
 	return r
 }
 
+// showTrayMenu — меню по правому клику, собирается заново: галочки показывают, что включено.
 func showTrayMenu(hwnd uintptr) {
+	if trayMenuFn == nil {
+		return
+	}
+	items := trayMenuFn()
 	m, _, _ := procCreatePopupMenu.Call()
-	items := []string{"Открыть NetSwitch", "Подключить самый быстрый", "Отключить (DNS провайдера)", "", "Выход"}
-	ids := []uintptr{1, 2, 3, 0, 4}
-	for i, s := range items {
-		if s == "" {
+	for i, it := range items {
+		if it.Sep {
 			procAppendMenuW.Call(m, mfSeparator, 0, 0)
 			continue
 		}
-		procAppendMenuW.Call(m, mfString, ids[i], uintptr(unsafe.Pointer(u16(s))))
+		flags := uintptr(mfString)
+		if it.Checked {
+			flags |= 0x8 // MF_CHECKED
+		}
+		if it.Disabled {
+			flags |= 0x1 // MF_GRAYED
+		}
+		procAppendMenuW.Call(m, flags, uintptr(i+1), uintptr(unsafe.Pointer(u16(it.Title))))
 	}
 	var pt [2]int32
 	procGetCursorPos.Call(uintptr(unsafe.Pointer(&pt[0])))
 	procSetForegroundWindow.Call(hwnd)
 	cmd, _, _ := procTrackPopupMenu.Call(m, 0x100|0x2|0x20, uintptr(pt[0]), uintptr(pt[1]), 0, hwnd, 0) // RETURNCMD|RIGHTBUTTON|BOTTOMALIGN
 	procDestroyMenu.Call(m)
-	if cmd >= 1 && cmd <= 4 && trayCbs[cmd-1] != nil {
-		go trayCbs[cmd-1]()
+	if cmd >= 1 && int(cmd) <= len(items) && items[cmd-1].Do != nil && !items[cmd-1].Disabled {
+		go items[cmd-1].Do()
 	}
 }
 
 var trayHwnd uintptr
 
 // runTray запускает иконку в трее (блокирует — вызывать в отдельной горутине).
-func runTray(onOpen, onFastest, onOff, onExit func()) {
+func runTray(onOpen func(), menu func() []trayItem) {
 	runtime.LockOSThread()
-	trayCbs = [4]func(){onOpen, onFastest, onOff, onExit}
+	trayOpen, trayMenuFn = onOpen, menu
 	hinst, _, _ := procGetModuleHandleW.Call(0)
 	cls := u16("NetSwitchTray")
 	wc := wndClassEx{lpfnWndProc: syscall.NewCallback(trayWndProc), hInstance: hinst, lpszClassName: cls}

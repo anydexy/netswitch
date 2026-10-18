@@ -309,6 +309,7 @@ func restartForUpdate() {
 	if getTgwsStatus().Running {
 		tgwsStop()
 	}
+	warpDisconnect() // новая версия подключит WARP снова
 	trayRemove()
 	if httpLn != nil {
 		_ = httpLn.Close()

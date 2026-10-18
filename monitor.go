@@ -149,7 +149,7 @@ func checkProvider(p Provider) {
 	if p.Kind == "warp" {
 		inst, conn, txt := warpStatus()
 		ps.Installed, ps.Connected, ps.Status = inst, conn, txt
-		if ms, err := icmpPing("162.159.192.1", 1500); err == nil {
+		if ms, err := icmpPing(warpEndpointHost(), 1500); err == nil {
 			ps.PingMs = ms
 		}
 		ps.Alive = inst

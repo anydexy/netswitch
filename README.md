@@ -10,10 +10,10 @@
   - У каждого способа видно пинг, время ответа DNS, есть ли интернет и какую страну видят сайты (ChatGPT, Claude).
   - Из всех серверов сервиса выбираются два самых быстрых и прописываются во все активные адаптеры (на macOS — во все подключённые сетевые службы), для IPv4 и IPv6. По желанию можно включить DoH (Windows 11).
 - **Исключения DNS:** выбранные сайты с поддоменами (по умолчанию figma.com) всегда открываются через обычный DNS (8.8.8.8, 1.1.1.1), даже когда подключён DNS для обхода. В Windows сделано через таблицу политик разрешения имён (NRPT), в macOS — файлами `/etc/resolver`. В браузере «Безопасный DNS» должен быть выключен.
-- **Cloudflare WARP:** управляет официальным клиентом через `warp-cli`.
+- **Cloudflare WARP через AmneziaWG:** туннель встроен в NetSwitch (amneziawg-go), отдельный клиент не нужен. Программа сама регистрирует устройство WARP у Cloudflare и собирает конфиг с маскировкой AmneziaWG — как [bash-warp-generator](https://github.com/ImMALWARE/bash-warp-generator). Если Cloudflare недоступен из вашей сети, конфиг можно сделать в GitHub Codespaces (`bash warp_generator.sh`) или взять из AmneziaVPN и вставить на вкладке WARP. Туннель работает, пока запущен NetSwitch. В Windows нужен драйвер wintun — он встроен в exe (`third_party/wintun`).
 - **Zapret:**
   - Windows — сборка [Flowseal/zapret-discord-youtube](https://github.com/Flowseal/zapret-discord-youtube) (winws + WinDivert), можно установить службой Windows;
-  - macOS — `tpws` из оригинального [bol-van/zapret](https://github.com/bol-van/zapret): прозрачный прокси, на который трафик к сайтам (TCP 80/443) направляют правила PF. UDP (QUIC, голос Discord) на macOS не обходится;
+  - macOS — `tpws` из оригинального [bol-van/zapret](https://github.com/bol-van/zapret): прозрачный прокси, на который трафик к сайтам (TCP 80/443) направляют правила PF; 16 стратегий для теста. QUIC, пока zapret включён, блокируется — браузер переходит на TCP. Голос Discord (UDP) на macOS не обходится;
   - скачивание последней версии и проверка обновлений, запуск и остановка, тест всех стратегий с выбором лучшей.
 - **TG WS Proxy** (сборка [Flowseal/tg-ws-proxy](https://github.com/Flowseal/tg-ws-proxy)) — локальный MTProto-прокси, который ускоряет Telegram Desktop:
   - скачивание последней версии с проверкой контрольной суммы и проверка обновлений;
@@ -23,6 +23,7 @@
 - **«Самый быстрый»:** проверяет все способы и подключает лучший.
 - **Авто-режим:** если текущий способ перестал работать, программа сама переключается на рабочий.
 - **Обновления:** при запуске и раз в 12 часов программа проверяет последний релиз на GitHub. Если есть новая версия, появляется окно с описанием, а в авто-режиме (по умолчанию) архив для своей системы скачивается, проверяется по контрольной сумме, ставится, и программа перезапускается — открытое окно переподключается само. Вручную — «Настройки → Обновления → Проверить обновления».
+- **Значок в трее (Windows):** открыть окно, «Самый быстрый», включить и выключить WARP, zapret и TG WS Proxy, отключиться, выйти.
 - Автозапуск: в Windows — через Планировщик (с правами администратора, без окна UAC, значок в трее), в macOS — заданием launchd при загрузке (без запроса пароля).
 
 ## Установка
@@ -37,8 +38,8 @@
 
 ### macOS (11 Big Sur и новее, Intel и Apple Silicon)
 
-1. Скачайте `NetSwitch-mac.zip` со страницы **Releases** и распакуйте.
-2. Перетащите `NetSwitch.app` в «Программы».
+1. Скачайте `NetSwitch-mac.dmg` со страницы **Releases** и откройте его.
+2. Перетащите `NetSwitch.app` в «Программы» (`NetSwitch-mac.zip` — то же самое архивом, им пользуется автообновление).
 3. Программа не подписана сертификатом Apple, поэтому при первом запуске macOS её не откроет («повреждена» или «не удаётся проверить разработчика»). Один раз выполните в Терминале:
    ```
    xattr -dr com.apple.quarantine /Applications/NetSwitch.app
@@ -59,7 +60,7 @@ GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "-H=windowsgui -s -w" -o N
 
 На Windows можно запустить `build.bat`.
 
-macOS — универсальная программа (Intel + Apple Silicon), `NetSwitch.app` и архив `NetSwitch-mac.zip`. Собирается на любой системе, Xcode не нужен:
+macOS — универсальная программа (Intel + Apple Silicon), `NetSwitch.app` и архив `NetSwitch-mac.zip`. Собирается на любой системе, Xcode не нужен (образ `.dmg` собирает workflow `mac-dmg` при публикации релиза — `hdiutil` есть только в macOS):
 
 ```
 go run ./tools/macapp -version 1.4.0 -out dist
@@ -67,7 +68,7 @@ go run ./tools/macapp -version 1.4.0 -out dist
 
 ## Проверка
 
-GitHub Actions (.github/workflows): тесты на Windows и macOS; на настоящем macOS программа запускается от root и проверяет смену DNS, исключения DNS, zapret (tpws + PF), тест стратегий и TG WS Proxy (.github/scripts/mac-smoke.sh). Workflow «Update e2e» собирает старую версию и проверяет обновление до последнего релиза на Windows и macOS.
+GitHub Actions (`.github/workflows`): тесты на Windows и macOS. На настоящем macOS программа запускается от root и проверяет смену DNS, исключения DNS, zapret (tpws + PF), тест стратегий, TG WS Proxy и WARP через AmneziaWG (`.github/scripts/mac-smoke.sh`); на Windows — DNS и WARP (`.github/scripts/win-smoke.ps1`). WARP считается рабочим, только если `cloudflare.com/cdn-cgi/trace` отвечает `warp=on`. Workflow «Update e2e» собирает старую версию и проверяет обновление до последнего релиза на Windows и macOS.
 
 ## Как устроено
 

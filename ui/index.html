@@ -465,17 +465,14 @@ function renderProvider(p){
   const locs=[...new Set((ps.geo||[]).map(g=>g.loc).filter(Boolean))];
   h+='<div class="stats">';
   h+=`<div class="stat"><div class="l">Пинг</div><div class="n ${msCls(ps.ping_ms)}">${msTxt(ps.ping_ms)}</div><div class="s">до сервера</div></div>`;
-  if(p.kind==='warp')h+=`<div class="stat"><div class="l">Клиент WARP</div><div class="n" style="font-size:16px;margin-top:6px">${ps.installed?'Установлен':'Не установлен'}</div><div class="s">${esc(ps.status||'')}</div></div>`;
+  if(p.kind==='warp'){const w=S.warp||{};h+=`<div class="stat"><div class="l">Рукопожатие</div><div class="n" style="font-size:16px;margin-top:6px">${w.up?(w.handshake>=0?w.handshake+' с назад':'ждём…'):'—'}</div><div class="s">${esc(ps.status||'')}</div></div>`}
   else h+=`<div class="stat"><div class="l">Ответ DNS</div><div class="n ${msCls(ps.dns_ms)}">${msTxt(ps.dns_ms)}</div><div class="s">${ps.alive?'сервер отвечает':'нет ответа'}</div></div>`;
   const noNet=p.kind==='warp'&&!ps.connected;
   h+=`<div class="stat"><div class="l">Интернет</div><div class="n ${noNet?'':ps.internet?'c-ok':'c-bad'}">${noNet?'—':ps.internet?'Есть':'Нет'}</div><div class="s">${noNet?'после подключения':'через этот способ'}</div></div>`;
   h+=`<div class="stat"><div class="l">Гео-блоки</div><div class="n">${ps.geo_total?ps.geo_ok+' из '+ps.geo_total:'—'}</div><div class="s">${locs.length?'страна: '+esc(locs.join(', ')):'ChatGPT, Claude'}</div></div>`;
   h+='</div>';
 
-  if(p.kind==='warp'){
-    h+=`<div class="sec">Клиент</div><div class="group"><div class="row"><div class="k">Cloudflare WARP<small>Программа управляет официальным клиентом через warp-cli</small></div><button onclick="api('/api/open',{url:'https://one.one.one.one/'})">Скачать WARP</button></div></div>
-    <div class="foot">При подключении WARP системный DNS сбрасывается на автоматический — у WARP свой. DNS и WARP взаимоисключающие, а zapret можно держать включённым с любым из них.</div>`;
-  }
+  if(p.kind==='warp')h+=renderWarpConf(busy);
   if(ps.geo&&ps.geo.length){
     h+='<div class="sec">Сайты с гео-блоком</div><div class="group">';
     for(const g of ps.geo)h+=`<div class="row"><div class="k">${esc(g.domain)}<small>${g.loc?'видит страну '+esc(g.loc):'—'}${g.ms?' · '+g.ms+' мс':''}</small></div>${g.ok?'<span class="tag ok">Открывается</span>':`<span class="tag bad">${esc(g.err||'Блок по стране')}</span>`}</div>`;
@@ -491,10 +488,34 @@ function renderProvider(p){
   return h;
 }
 
+// --- конфиг WARP (AmneziaWG) ---
+let warpEdit=false, warpText='';
+function fmtBytes(n){return n>=1<<30?(n/(1<<30)).toFixed(1)+' ГБ':n>=1<<20?(n/(1<<20)).toFixed(1)+' МБ':Math.round(n/1024)+' КБ'}
+function renderWarpConf(busy){
+  const w=S.warp||{};
+  let h=`<div class="sec">Туннель AmneziaWG</div><div class="group">`;
+  if(w.has_conf){
+    h+=`<div class="row"><div class="k">Сервер</div><span class="v mono">${esc(w.endpoint||'—')}</span></div>
+    <div class="row"><div class="k">Адрес в туннеле</div><span class="v mono">${esc(w.address||'—')}</span></div>
+    <div class="row"><div class="k">Маскировка AmneziaWG<small>Мусорные пакеты и пакет-приманка, чтобы DPI не узнал WireGuard</small></div>${w.obf?'<span class="tag ok">Есть</span>':'<span class="tag warn">Нет — обычный WireGuard</span>'}</div>`;
+    if(w.up)h+=`<div class="row"><div class="k">Трафик</div><span class="v">↓ ${fmtBytes(w.rx||0)} · ↑ ${fmtBytes(w.tx||0)}</span></div>`;
+    if(w.err)h+=`<div class="row"><span class="c-bad">${esc(w.err)}</span></div>`;
+  }else h+=`<div class="row"><div class="k">Конфига ещё нет<small>NetSwitch зарегистрирует устройство WARP у Cloudflare при первом подключении</small></div></div>`;
+  h+=`<div class="row col"><div class="btns"><button ${busy?'disabled':''} onclick="if(confirm('Зарегистрировать новое устройство WARP? Старый конфиг заменится.'))act('/api/warp/generate',{},'Регистрирую WARP…')">Сгенерировать новый конфиг</button><button onclick="warpToggleEdit()">${warpEdit?'Скрыть':'Свой конфиг'}</button></div>`;
+  if(warpEdit)h+=`<textarea rows="12" style="margin-top:10px" placeholder="[Interface]&#10;PrivateKey = …&#10;Jc = …&#10;…&#10;[Peer]&#10;PublicKey = …&#10;Endpoint = …" oninput="warpText=this.value">${esc(warpText)}</textarea><div class="btns" style="margin-top:8px"><button class="pri" onclick="act('/api/warp/save',{conf:warpText},'Сохраняю конфиг…').then(()=>{warpEdit=false;lastRender='';render()})">Сохранить и применить</button></div>`;
+  h+=`</div></div><div class="foot">Конфиг AmneziaWG для WARP NetSwitch делает сам, как <a href="#" onclick="api('/api/open',{url:'https://github.com/ImMALWARE/bash-warp-generator'});return false">bash-warp-generator</a>. Если Cloudflare недоступен из вашей сети, откройте этот репозиторий → Code → Codespaces, выполните <span class="mono">bash warp_generator.sh</span> и вставьте конфиг в «Свой конфиг». Подойдёт и конфиг из AmneziaVPN/AmneziaWG. Туннель работает, пока запущен NetSwitch; DNS и WARP взаимоисключающие, zapret можно держать включённым с любым из них.</div>`;
+  return h;
+}
+async function warpToggleEdit(){
+  warpEdit=!warpEdit;
+  if(warpEdit&&!warpText){try{const r=await api('/api/warp/conf');if(r.ok)warpText=r.data||''}catch(e){}}
+  lastRender='';render();
+}
+
 function renderZapret(){
   const z=S.zapret,c=S.cfg,t=z.test,strats=z.strategies||[],svc=z.service_state;
   if(selStrat===null||!strats.includes(selStrat))selStrat=strats.includes(c.zapret_strategy)?c.zapret_strategy:(strats[0]||'');
-  let h=`<h1>Zapret</h1><p class="lead">Обход замедления и блокировок по DPI (YouTube, Discord и др.) прямо на компьютере, без VPN. Работает вместе с любым DNS.${MAC()?' На macOS работает tpws: обходятся сайты (TCP 80/443), а UDP — QUIC и голос Discord — нет.':''}</p>`;
+  let h=`<h1>Zapret</h1><p class="lead">Обход замедления и блокировок по DPI (YouTube, Discord и др.) прямо на компьютере, без VPN. Работает вместе с любым DNS.${MAC()?' На macOS работает tpws: обходятся сайты (TCP 80/443). QUIC, пока zapret включён, блокируется — браузер открывает сайты по TCP, через обход. Голос Discord (UDP) не обходится.':''}</p>`;
   // hero
   let stTxt,stCls='';
   if(z.running&&svc===4){stTxt='Работает как служба Windows';stCls='c-ok'}

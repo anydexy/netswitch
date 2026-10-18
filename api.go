@@ -20,6 +20,7 @@ type apiReq struct {
 	Only     []string        `json:"only"`
 	URL      string          `json:"url"`
 	Settings json.RawMessage `json:"settings"`
+	Conf     string          `json:"conf"`
 	Page     string          `json:"-"` // окно интерфейса (заголовок X-Page)
 }
 
@@ -82,7 +83,7 @@ func registerAPI(mux *http.ServeMux) {
 
 	h("/api/state", func(r apiReq) (any, error) {
 		s := snapshot()
-		return map[string]any{"app": s, "cfg": getCfg(), "zapret": getZapretStatus(), "tgws": getTgwsStatus(), "version": appVersion, "admin": isAdmin(), "platform": runtime.GOOS, "update": getUpdateStatus(), "newest_page": newestPage(r.Page)}, nil
+		return map[string]any{"app": s, "cfg": getCfg(), "zapret": getZapretStatus(), "tgws": getTgwsStatus(), "version": appVersion, "admin": isAdmin(), "platform": runtime.GOOS, "update": getUpdateStatus(), "newest_page": newestPage(r.Page), "warp": warpInfo()}, nil
 	})
 	h("/api/refresh", func(r apiReq) (any, error) {
 		if r.ID != "" {
@@ -186,42 +187,8 @@ func registerAPI(mux *http.ServeMux) {
 		}()
 		return nil, nil
 	})
-	h("/api/zapret/start", func(r apiReq) (any, error) {
-		if !zBusy.TryLock() {
-			return nil, errBusy
-		}
-		defer zBusy.Unlock()
-		s := r.Strategy
-		if s == "" {
-			s = getCfg().ZapretStrategy
-		}
-		if serviceState(zapretService) != 0 {
-			zapretServiceRemove(false)
-		}
-		err := zapretStartProcess(s)
-		if err == nil {
-			updateCfg(func(c *Settings) { c.ZapretStrategy = s; c.ZapretWanted = true })
-			logf("zapret запущен: %s", s)
-		}
-		refreshZapretStatus()
-		updateTray()
-		return nil, err
-	})
-	h("/api/zapret/stop", func(r apiReq) (any, error) {
-		if !zBusy.TryLock() {
-			return nil, errBusy
-		}
-		defer zBusy.Unlock()
-		updateCfg(func(c *Settings) { c.ZapretWanted = false })
-		if serviceState(zapretService) == 4 {
-			_, _ = run(20e9, "net", "stop", zapretService)
-		}
-		killWinws()
-		logf("zapret остановлен")
-		refreshZapretStatus()
-		updateTray()
-		return nil, nil
-	})
+	h("/api/zapret/start", func(r apiReq) (any, error) { return nil, zapretOn(r.Strategy) })
+	h("/api/zapret/stop", func(r apiReq) (any, error) { return nil, zapretOff() })
 	h("/api/zapret/service/install", func(r apiReq) (any, error) {
 		if !zBusy.TryLock() {
 			return nil, errBusy
@@ -291,25 +258,13 @@ func registerAPI(mux *http.ServeMux) {
 		}()
 		return nil, nil
 	})
-	tgwsOp := func(name string, wanted bool, f func() error) func(r apiReq) (any, error) {
-		return func(r apiReq) (any, error) {
-			if !tBusy.TryLock() {
-				return nil, errTgwsBusy
-			}
-			defer tBusy.Unlock()
-			err := f()
-			if err == nil {
-				updateCfg(func(c *Settings) { c.TgwsWanted = wanted })
-				logf("TG WS Proxy %s", name)
-			}
-			refreshTgwsStatus()
-			updateTray()
-			return nil, err
-		}
-	}
-	h("/api/tgws/start", tgwsOp("запущен", true, tgwsStartProcess))
-	h("/api/tgws/takeover", tgwsOp("запущен из NetSwitch", true, tgwsTakeOver))
-	h("/api/tgws/stop", tgwsOp("остановлен", false, func() error { tgwsStop(); return nil }))
+	h("/api/tgws/start", func(r apiReq) (any, error) { return nil, tgwsSwitch("запущен", true, tgwsStartProcess) })
+	h("/api/tgws/takeover", func(r apiReq) (any, error) {
+		return nil, tgwsSwitch("запущен из NetSwitch", true, tgwsTakeOver)
+	})
+	h("/api/tgws/stop", func(r apiReq) (any, error) {
+		return nil, tgwsSwitch("остановлен", false, func() error { tgwsStop(); return nil })
+	})
 	h("/api/tgws/telegram", func(r apiReq) (any, error) {
 		l := tgwsLink(readTgwsConf(tgwsDataDir()))
 		if l == "" {
@@ -344,6 +299,41 @@ func registerAPI(mux *http.ServeMux) {
 		}
 		return nil, nil
 	})
+	// --- WARP (AmneziaWG) ---
+	warpReconnect := func() error { // применить новый конфиг, если WARP подключён
+		if snapshot().Active == "warp" {
+			return connect("warp")
+		}
+		return nil
+	}
+	h("/api/warp/conf", func(r apiReq) (any, error) {
+		b, err := os.ReadFile(warpConfPath())
+		if err != nil {
+			return "", nil
+		}
+		return string(b), nil
+	})
+	h("/api/warp/generate", func(r apiReq) (any, error) {
+		text, err := warpRegister()
+		if err != nil {
+			return nil, fmt.Errorf("%v. Конфиг можно сделать в GitHub Codespaces (bash warp_generator.sh) и вставить сюда", err)
+		}
+		if err := warpSaveConf(text); err != nil {
+			return nil, err
+		}
+		logf("WARP: зарегистрировано новое устройство")
+		warpDisconnect()
+		return nil, warpReconnect()
+	})
+	h("/api/warp/save", func(r apiReq) (any, error) {
+		if err := warpSaveConf(r.Conf); err != nil {
+			return nil, err
+		}
+		logf("WARP: сохранён свой конфиг")
+		warpDisconnect()
+		return nil, warpReconnect()
+	})
+
 	// --- обновление NetSwitch ---
 	h("/api/update/check", func(r apiReq) (any, error) { return updateCheck() })
 	h("/api/update/install", func(r apiReq) (any, error) {
