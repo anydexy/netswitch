@@ -1,0 +1,28 @@
+# Откуда взят third_party/wintun/wintun.dll: официальный архив wintun.net, проверка SHA-256,
+# из архива — bin/amd64/wintun.dll и LICENSE.txt. Запускается вручную, результат — артефакт.
+name: wintun
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Скачать и проверить
+        run: |
+          set -euo pipefail
+          curl -fsSL https://www.wintun.net/builds/wintun-0.14.1.zip -o wintun.zip
+          sha256sum wintun.zip
+          echo "07c256185d6ee3652e09fa55c0b673e2624b565e02c4b9091c79ca7d2f24ef51  wintun.zip" | sha256sum -c -
+          unzip -q wintun.zip
+          mkdir -p out
+          cp wintun/bin/amd64/wintun.dll wintun/LICENSE.txt out/
+          sha256sum out/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wintun
+          path: out/
