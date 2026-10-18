@@ -16,7 +16,7 @@ import (
 
 // appVersion — переменная, чтобы для проверки обновления можно было собрать «старую» версию:
 // go build -ldflags "-X main.appVersion=1.0.0".
-var appVersion = "1.4.1"
+var appVersion = "1.4.2"
 
 //go:embed ui
 var uiFS embed.FS

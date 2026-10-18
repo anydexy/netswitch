@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestNewerVersion(t *testing.T) {
@@ -54,5 +55,21 @@ func TestReplaceFile(t *testing.T) {
 		if _, err := os.Stat(p + s); err == nil {
 			t.Errorf("остался %s", s)
 		}
+	}
+}
+
+func TestNewestPage(t *testing.T) {
+	pages = map[string]time.Time{}
+	newestPage("1700000000000-old")
+	if got := newestPage("1700000005000-new"); got != "1700000005000-new" {
+		t.Errorf("новое окно: %q", got)
+	}
+	// старое окно спросило позже (его таймеры притормозил браузер) — новым оно от этого не стало
+	if got := newestPage("1700000000000-old"); got != "1700000005000-new" {
+		t.Errorf("после опроса старого окна: %q", got)
+	}
+	pages["1700000005000-new"] = time.Now().Add(-time.Minute) // новое окно закрыли
+	if got := newestPage(""); got != "1700000000000-old" {
+		t.Errorf("после закрытия нового окна: %q", got)
 	}
 }

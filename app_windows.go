@@ -8,8 +8,10 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 	"unicode/utf16"
+	"unsafe"
 )
 
 // zapretSupported — winws и драйвер WinDivert есть только под Windows.
@@ -42,8 +44,57 @@ func dataDir() string {
 func fixOwner(path string)     {}
 func fixOwnerTree(path string) {}
 
-// openWindow открывает интерфейс отдельным окном Edge (режим приложения), иначе — в браузере.
+var (
+	procGetWindowTextW  = user32.NewProc("GetWindowTextW")
+	procIsWindowVisible = user32.NewProc("IsWindowVisible")
+	procIsIconic        = user32.NewProc("IsIconic")
+	procShowWindow      = user32.NewProc("ShowWindow")
+)
+
+// focusUIWindow выводит на передний план уже открытое окно интерфейса — окно Edge в режиме
+// приложения с заголовком страницы «NetSwitch». false — такого окна нет.
+func focusUIWindow() bool {
+	enumMu.Lock()
+	var found uintptr
+	buf := make([]uint16, 256)
+	enumFn = func(hwnd uintptr) bool {
+		if v, _, _ := procIsWindowVisible.Call(hwnd); v == 0 {
+			return true
+		}
+		l, _, _ := procGetClassNameW.Call(hwnd, uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)))
+		if syscall.UTF16ToString(buf[:l]) != "Chrome_WidgetWin_1" {
+			return true
+		}
+		l, _, _ = procGetWindowTextW.Call(hwnd, uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)))
+		if syscall.UTF16ToString(buf[:l]) != "NetSwitch" {
+			return true
+		}
+		var pid uint32
+		procGetWindowThreadProcessId.Call(hwnd, uintptr(unsafe.Pointer(&pid)))
+		if !strings.EqualFold(filepath.Base(procPath(pid)), "msedge.exe") {
+			return true
+		}
+		found = hwnd
+		return false
+	}
+	procEnumWindows.Call(enumCb, 0)
+	enumMu.Unlock()
+	if found == 0 {
+		return false
+	}
+	if ic, _, _ := procIsIconic.Call(found); ic != 0 {
+		procShowWindow.Call(found, 9) // SW_RESTORE
+	}
+	procSetForegroundWindow.Call(found)
+	return true
+}
+
+// openWindow показывает уже открытое окно интерфейса, а если его нет — открывает отдельным окном
+// Edge (режим приложения), иначе — в браузере.
 func openWindow(url string) {
+	if focusUIWindow() {
+		return
+	}
 	w, h := windowSize()
 	for _, base := range []string{os.Getenv("ProgramFiles(x86)"), os.Getenv("ProgramFiles"), os.Getenv("LOCALAPPDATA")} {
 		if base == "" {

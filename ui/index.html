@@ -226,6 +226,8 @@ body.compact .page{max-width:440px}
 <div id="toast"><span class="d"></span><span id="toastt"></span></div>
 <script>
 const T=new URLSearchParams(location.search).get('t')||'';
+const PAGE=Date.now()+'-'+Math.random().toString(36).slice(2,8); // это окно; старые окна закрываются, если открыли новое
+let closeTried=false;
 let S=null, tab=localStorage.getItem('tab')||'dns', dnsSort=localStorage.getItem('dnsSort')||'lat', busyLocal='', selStrat=null, lastRender='';
 // тема и вид: до ответа программы — как в прошлый раз, затем — из настроек программы
 let uiTheme=localStorage.getItem('uiTheme')||'auto', uiCompact=localStorage.getItem('uiCompact')==='1', uiSaving=0;
@@ -655,8 +657,9 @@ function render(){
   if(open.length)m.querySelectorAll('details').forEach(d=>{if(open.includes(d.closest('.row')?.querySelector('.k')?.firstChild?.textContent))d.open=true});
 }
 async function poll(){
-  try{const r=await fetch('/api/state',{method:'POST',headers:{'X-Token':T}});const j=await r.json();
+  try{const r=await fetch('/api/state',{method:'POST',headers:{'X-Token':T,'X-Page':PAGE}});const j=await r.json();
     if(j.ok){
+      if(j.data.newest_page&&j.data.newest_page!==PAGE&&!closeTried){closeTried=true;window.close()} // открыто окно новее
       if(bootVersion&&j.data.version!==bootVersion){location.reload();return} // обновилась — загрузить новый интерфейс
       bootVersion=j.data.version;S=j.data;render()}}
   catch(e){

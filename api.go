@@ -8,7 +8,10 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
+	"sync"
+	"time"
 )
 
 type apiReq struct {
@@ -17,6 +20,36 @@ type apiReq struct {
 	Only     []string        `json:"only"`
 	URL      string          `json:"url"`
 	Settings json.RawMessage `json:"settings"`
+	Page     string          `json:"-"` // окно интерфейса (заголовок X-Page)
+}
+
+var (
+	pagesMu sync.Mutex
+	pages   = map[string]time.Time{} // окно → когда оно последний раз спрашивало состояние
+)
+
+// newestPage запоминает окно интерфейса и возвращает самое новое из открытых. Окно сообщает
+// "<время открытия, мс>-<случайное>"; старые окна, увидев, что есть новее, закрываются сами —
+// так окна не копятся, если NetSwitch открыли ещё раз.
+func newestPage(id string) string {
+	now := time.Now()
+	pagesMu.Lock()
+	defer pagesMu.Unlock()
+	if id != "" && len(id) < 64 {
+		pages[id] = now
+	}
+	newest, best := "", int64(-1)
+	for k, seen := range pages {
+		if now.Sub(seen) > 10*time.Second {
+			delete(pages, k)
+			continue
+		}
+		created, _ := strconv.ParseInt(strings.SplitN(k, "-", 2)[0], 10, 64)
+		if created > best {
+			newest, best = k, created
+		}
+	}
+	return newest
 }
 
 func reply(w http.ResponseWriter, v any, err error) {
@@ -37,6 +70,7 @@ func registerAPI(mux *http.ServeMux) {
 			if req.Method == "POST" {
 				_ = json.NewDecoder(req.Body).Decode(&r)
 			}
+			r.Page = req.Header.Get("X-Page")
 			if !zapretSupported && strings.HasPrefix(path, "/api/zapret/") {
 				reply(w, nil, errors.New("zapret работает только в Windows"))
 				return
@@ -48,7 +82,7 @@ func registerAPI(mux *http.ServeMux) {
 
 	h("/api/state", func(r apiReq) (any, error) {
 		s := snapshot()
-		return map[string]any{"app": s, "cfg": getCfg(), "zapret": getZapretStatus(), "tgws": getTgwsStatus(), "version": appVersion, "admin": isAdmin(), "platform": runtime.GOOS, "update": getUpdateStatus()}, nil
+		return map[string]any{"app": s, "cfg": getCfg(), "zapret": getZapretStatus(), "tgws": getTgwsStatus(), "version": appVersion, "admin": isAdmin(), "platform": runtime.GOOS, "update": getUpdateStatus(), "newest_page": newestPage(r.Page)}, nil
 	})
 	h("/api/refresh", func(r apiReq) (any, error) {
 		if r.ID != "" {
