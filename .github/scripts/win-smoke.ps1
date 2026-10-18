@@ -44,7 +44,7 @@ Get-NetRoute -DestinationPrefix '0.0.0.0/1', '128.0.0.0/1' | Format-Table Destin
 Get-NetIPAddress -InterfaceAlias 'NetSwitch WARP' | Format-Table IPAddress, PrefixLength, AddressState, SkipAsSource
 Get-NetIPInterface -InterfaceAlias 'NetSwitch WARP' | Format-Table AddressFamily, InterfaceMetric, NlMtu, Dhcp, ConnectionState
 Get-DnsClientServerAddress -InterfaceAlias 'NetSwitch WARP' | Format-Table AddressFamily, ServerAddresses
-Find-NetRoute -RemoteIPAddress 1.1.1.1 | Format-Table IPAddress, InterfaceAlias, DestinationPrefix, NextHop
+try { Find-NetRoute -RemoteIPAddress 1.1.1.1 | Format-Table IPAddress, InterfaceAlias, DestinationPrefix, NextHop } catch { "Find-NetRoute: $_" }
 ping -n 3 1.1.1.1
 try { Resolve-DnsName www.cloudflare.com -Server 1.1.1.1 -Type A -DnsOnly | Format-Table Name, IPAddress } catch { "Resolve-DnsName: $_" }
 (Api '/api/state').data.warp | Select-Object handshake, rx, tx | Format-List

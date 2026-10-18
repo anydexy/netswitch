@@ -75,16 +75,29 @@ func awgRoutesUp(tdev tun.Device, name string, c awgConf, ep netip.AddrPort) (fu
 	sb.WriteString(fmt.Sprintf(`New-NetRoute -DestinationPrefix %s -InterfaceIndex $r.ifIndex -NextHop $r.NextHop -RouteMetric 0 -PolicyStore ActiveStore | Out-Null;`, psQuote(epPrefix)))
 	hasV6 := false
 	for _, a := range c.Address {
+		if a.Addr().Is6() {
+			hasV6 = true
+		}
+	}
+	// До адресов: без проверки дубликата адреса (DAD) — иначе адрес туннеля несколько секунд или
+	// дольше остаётся «Tentative», с него нельзя отправлять, и трафик в туннеле стоит (так же
+	// делает WireGuard для Windows). Объявления роутеров на туннеле тоже не нужны.
+	fams := []string{"IPv4"}
+	if hasV6 {
+		fams = append(fams, "IPv6")
+	}
+	for _, f := range fams {
+		sb.WriteString(fmt.Sprintf(`Set-NetIPInterface -InterfaceIndex %d -AddressFamily %s -DadTransmits 0 -RouterDiscovery Disabled -InterfaceMetric 1 -NlMtuBytes %d;`, idx, f, c.MTU))
+	}
+	for _, a := range c.Address {
 		pl := 32
 		if a.Addr().Is6() {
-			pl, hasV6 = 128, true
+			pl = 128
 		}
 		sb.WriteString(fmt.Sprintf(`New-NetIPAddress -InterfaceIndex %d -IPAddress %s -PrefixLength %d -PolicyStore ActiveStore | Out-Null;`, idx, psQuote(a.Addr().String()), pl))
 	}
-	sb.WriteString(fmt.Sprintf(`Set-NetIPInterface -InterfaceIndex %d -AddressFamily IPv4 -InterfaceMetric 1 -NlMtuBytes %d;`, idx, c.MTU))
 	routes := []string{"0.0.0.0/1", "128.0.0.0/1"}
 	if hasV6 {
-		sb.WriteString(fmt.Sprintf(`Set-NetIPInterface -InterfaceIndex %d -AddressFamily IPv6 -InterfaceMetric 1 -NlMtuBytes %d;`, idx, c.MTU))
 		routes = append(routes, "::/1", "8000::/1")
 	}
 	for _, p := range routes {
