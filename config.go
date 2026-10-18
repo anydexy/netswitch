@@ -43,6 +43,9 @@ type Settings struct {
 	TgwsRepo   string `json:"tgws_repo"`
 	TgwsWanted bool   `json:"tgws_wanted"` // пользователь включил TG WS Proxy — следим, чтобы работал
 
+	UITheme   string `json:"ui_theme"`   // auto | light | dark
+	UICompact bool   `json:"ui_compact"` // компактный вид: узкое окно, только главное
+
 	Active string `json:"active"` // id активного способа
 
 	SeenDefaults []string `json:"seen_defaults"` // стандартные способы, которые уже добавлялись (новые в обновлениях добавятся сами)
@@ -110,6 +113,7 @@ func defaultSettings() Settings {
 		},
 		AutoInterval:   30,
 		SetIPv6:        true,
+		UITheme:        "auto",
 		MyCountry:      "RU",
 		GeoTests:       []string{"chatgpt.com", "claude.ai"},
 		NetTest:        "http://www.msftconnecttest.com/connecttest.txt",
@@ -136,13 +140,8 @@ var (
 	cfg   Settings
 )
 
-func appDir() string {
-	exe, err := os.Executable()
-	if err != nil {
-		return "."
-	}
-	return filepath.Dir(exe)
-}
+// appDir — папка настроек, журнала, zapret и TG WS Proxy (app_windows.go: рядом с exe,
+// sys_darwin.go: ~/Library/Application Support/NetSwitch).
 
 func cfgPath() string { return filepath.Join(appDir(), "netswitch.json") }
 
@@ -186,6 +185,9 @@ func parseConfig(b []byte) Settings {
 	if c.GameFilter == "" {
 		c.GameFilter = "off"
 	}
+	if c.UITheme != "light" && c.UITheme != "dark" {
+		c.UITheme = "auto"
+	}
 	if c.GeoTests == nil {
 		c.GeoTests = d.GeoTests
 	}
@@ -227,6 +229,7 @@ func saveConfig() {
 	b, _ := json.MarshalIndent(cfg, "", "  ")
 	cfgMu.Unlock()
 	_ = os.WriteFile(cfgPath(), b, 0644)
+	fixOwner(cfgPath())
 }
 
 func getCfg() Settings {

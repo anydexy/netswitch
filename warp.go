@@ -2,24 +2,11 @@ package main
 
 import (
 	"errors"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 )
 
-func warpCLI() string {
-	for _, base := range []string{os.Getenv("ProgramFiles"), `C:\Program Files`, os.Getenv("ProgramFiles(x86)")} {
-		if base == "" {
-			continue
-		}
-		p := filepath.Join(base, "Cloudflare", "Cloudflare WARP", "warp-cli.exe")
-		if _, err := os.Stat(p); err == nil {
-			return p
-		}
-	}
-	return ""
-}
+// warpCLI — путь к warp-cli официального клиента (app_windows.go, sys_darwin.go).
 
 // warpStatus: installed, connected, текст статуса.
 func warpStatus() (bool, bool, string) {

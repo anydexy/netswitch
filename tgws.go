@@ -20,20 +20,16 @@ import (
 )
 
 // TG WS Proxy (github.com/Flowseal/tg-ws-proxy) — локальный MTProto-прокси для Telegram Desktop.
-// NetSwitch скачивает официальную сборку для Windows в папку tgws\ и запускает её в портативном
-// режиме: настройки и secret лежат в tgws\TgWsProxy_data, а не в %APPDATA%.
+// NetSwitch скачивает официальную сборку в папку tgws и запускает её сам. Что зависит от системы
+// (имя файла в релизе, установка, где лежат настройки, запуск) — в tgws_windows.go и tgws_darwin.go.
 
 const (
-	tgwsExeName  = "TgWsProxy.exe"
-	tgwsAsset    = "TgWsProxy_windows.exe" // Windows 10+ x64
-	tgwsDataName = "TgWsProxy_data"        // наличие папки включает портативный режим
+	tgwsDataName = "TgWsProxy_data" // наличие папки рядом с exe включает портативный режим
 	tgwsMutex    = `Local\TgWsProxy_SingleInstance`
 	tgwsWMStop   = 0x400 + 10 // WM_STOP у pystray: штатный выход, как «Выход» в меню его значка
 )
 
-func tgwsDir() string     { return filepath.Join(appDir(), "tgws") }
-func tgwsExe() string     { return filepath.Join(tgwsDir(), tgwsExeName) }
-func tgwsDataDir() string { return filepath.Join(tgwsDir(), tgwsDataName) }
+func tgwsDir() string { return filepath.Join(appDir(), "tgws") }
 
 type TgwsStatus struct {
 	Installed     bool   `json:"installed"`
@@ -106,9 +102,11 @@ func tgwsLink(c tgwsConf) string {
 // tgwsPrepare готовит портативную папку настроек перед запуском.
 func tgwsPrepare(src string, force bool) error {
 	if src == "" {
-		src = filepath.Join(os.Getenv("APPDATA"), "TgWsProxy")
+		src = tgwsStdDir()
 	}
-	return tgwsPrepareIn(tgwsDataDir(), src, force)
+	err := tgwsPrepareIn(tgwsDataDir(), src, force)
+	fixOwnerTree(tgwsDataDir()) // прокси запускается от имени пользователя, а не администратора
+	return err
 }
 
 // tgwsPrepareIn переносит настройки из src (обычно %APPDATA%\TgWsProxy), чтобы сохранился secret,
@@ -258,7 +256,7 @@ func tgwsStartProcess() error {
 	if err := tgwsPrepare("", false); err != nil {
 		return err
 	}
-	c := exec.Command(tgwsExe())
+	c := tgwsCommand()
 	c.Dir = tgwsDir()
 	if err := c.Start(); err != nil {
 		return err
@@ -275,7 +273,7 @@ func tgwsStartProcess() error {
 			tProc = nil
 		}
 		tMu.Unlock()
-		return fmt.Errorf("TgWsProxy.exe сразу завершился (%v) — подробности в журнале прокси", err)
+		return fmt.Errorf("TG WS Proxy сразу завершился (%v) — подробности в журнале прокси", err)
 	case <-time.After(2 * time.Second):
 	}
 	go func() {
@@ -327,21 +325,6 @@ func tgwsTakeOver() error {
 	}
 	logf("TG WS Proxy: отдельный экземпляр закрыт, дальше им управляет NetSwitch")
 	return tgwsStartProcess()
-}
-
-// tgwsRemoveForeignAutostart убирает автозапуск отдельного TG WS Proxy (его настройка «Автозапуск»),
-// чтобы при входе в Windows он не занимал порт раньше NetSwitch.
-// Через PowerShell, а не reg.exe: тот выводит путь в OEM-кодировке, и кириллица в пути не сравнится.
-func tgwsRemoveForeignAutostart() {
-	key := psQuote(`HKCU:\Software\Microsoft\Windows\CurrentVersion\Run`)
-	out, err := ps(15*time.Second, "(Get-ItemProperty -Path "+key+" -Name TgWsProxy -ErrorAction Stop).TgWsProxy")
-	out = strings.ToLower(strings.TrimSpace(out))
-	if err != nil || out == "" || strings.Contains(out, strings.ToLower(tgwsExe())) {
-		return
-	}
-	if _, err := ps(15*time.Second, "Remove-ItemProperty -Path "+key+" -Name TgWsProxy -ErrorAction Stop"); err == nil {
-		logf("TG WS Proxy: отключён автозапуск отдельного экземпляра")
-	}
 }
 
 // --- версия и обновление ---
@@ -447,7 +430,7 @@ func tgwsDownload() error {
 	if resp.StatusCode != 200 {
 		return fail("Ошибка загрузки: ", fmt.Errorf("HTTP %d", resp.StatusCode))
 	}
-	tmp := tgwsExe() + ".download"
+	tmp := filepath.Join(tgwsDir(), tgwsAsset+".download")
 	f, err := os.Create(tmp)
 	if err != nil {
 		return fail("Ошибка: ", err)
@@ -470,19 +453,12 @@ func tgwsDownload() error {
 	ours, _ := tgwsProcs()
 	wasRunning := len(ours) > 0
 	tgwsStop()
-	old := tgwsExe() + ".old"
-	_ = os.Remove(old)
-	if _, err := os.Stat(tgwsExe()); err == nil {
-		if err := os.Rename(tgwsExe(), old); err != nil {
-			return fail("Не удалось заменить TgWsProxy.exe (файл занят): ", err)
-		}
+	if err := tgwsInstall(tmp); err != nil {
+		setTDL(false, 0, "Ошибка: "+err.Error())
+		return err
 	}
-	if err := os.Rename(tmp, tgwsExe()); err != nil {
-		_ = os.Rename(old, tgwsExe())
-		return fail("Ошибка замены: ", err)
-	}
-	_ = os.Remove(old)
 	_ = os.WriteFile(filepath.Join(tgwsDir(), "version.txt"), []byte(ver), 0644)
+	fixOwnerTree(tgwsDir())
 	_ = tgwsPrepare("", false)
 
 	msg := "Установлена версия " + ver

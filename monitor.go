@@ -8,7 +8,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"unicode/utf16"
 )
 
 type IPResult struct {
@@ -77,9 +76,14 @@ func logf(format string, a ...any) {
 		st.Log = st.Log[len(st.Log)-300:]
 	}
 	stMu.Unlock()
-	if f, err := os.OpenFile(filepath.Join(appDir(), "netswitch.log"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
+	p := filepath.Join(appDir(), "netswitch.log")
+	_, missing := os.Stat(p)
+	if f, err := os.OpenFile(p, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
 		fmt.Fprintln(f, time.Now().Format("2006-01-02 ")+line)
 		f.Close()
+		if missing != nil {
+			fixOwner(p)
+		}
 	}
 }
 
@@ -564,54 +568,7 @@ func autoLoop() {
 	}
 }
 
-// --- автозапуск через Планировщик (с правами администратора, без окна UAC) ---
-
-const taskName = "NetSwitch"
-
-func autostartEnabled() bool {
-	_, err := run(8*time.Second, "schtasks", "/Query", "/TN", taskName)
-	return err == nil
-}
-
-func setAutostart(on bool) error {
-	if !on {
-		_, _ = run(10*time.Second, "schtasks", "/Delete", "/F", "/TN", taskName)
-		return nil
-	}
-	exe, _ := os.Executable()
-	user := os.Getenv("USERDOMAIN") + `\` + os.Getenv("USERNAME")
-	xml := `<?xml version="1.0" encoding="UTF-16"?>
-<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
-  <RegistrationInfo><Description>NetSwitch — DNS / WARP / zapret</Description></RegistrationInfo>
-  <Triggers><LogonTrigger><Enabled>true</Enabled><UserId>` + xmlEsc(user) + `</UserId><Delay>PT10S</Delay></LogonTrigger></Triggers>
-  <Principals><Principal id="Author"><UserId>` + xmlEsc(user) + `</UserId><LogonType>InteractiveToken</LogonType><RunLevel>HighestAvailable</RunLevel></Principal></Principals>
-  <Settings>
-    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
-    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
-    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
-    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
-    <Priority>7</Priority>
-  </Settings>
-  <Actions Context="Author"><Exec><Command>` + xmlEsc(exe) + `</Command><Arguments>--tray</Arguments><WorkingDirectory>` + xmlEsc(filepath.Dir(exe)) + `</WorkingDirectory></Exec></Actions>
-</Task>`
-	u := utf16.Encode([]rune(xml))
-	b := make([]byte, 2+len(u)*2)
-	b[0], b[1] = 0xFF, 0xFE
-	for i, v := range u {
-		b[2+i*2], b[3+i*2] = byte(v), byte(v>>8)
-	}
-	tmp := filepath.Join(os.TempDir(), "netswitch_task.xml")
-	if err := os.WriteFile(tmp, b, 0644); err != nil {
-		return err
-	}
-	defer os.Remove(tmp)
-	out, err := run(15*time.Second, "schtasks", "/Create", "/F", "/TN", taskName, "/XML", tmp)
-	if err != nil {
-		return fmt.Errorf("schtasks: %s", strings.TrimSpace(out))
-	}
-	return nil
-}
-
+// xmlEsc — экранирование текста для XML (задание Планировщика, plist автозапуска).
 func xmlEsc(s string) string {
 	return strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", `"`, "&quot;").Replace(s)
 }

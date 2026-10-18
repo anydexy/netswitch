@@ -10,7 +10,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"time"
 )
@@ -25,21 +24,14 @@ var (
 	baseURL string
 )
 
-func dataDir() string {
-	d := os.Getenv("LOCALAPPDATA")
-	if d == "" {
-		d = os.TempDir()
-	}
-	d = filepath.Join(d, "NetSwitch")
-	_ = os.MkdirAll(d, 0755)
-	return d
-}
+// dataDir, appDir, openWindow и прочее, что зависит от системы, — в app_windows.go и sys_darwin.go.
 
 type instanceInfo struct {
 	URL string `json:"url"`
 }
 
 func main() {
+	platformInit()
 	trayOnly := false
 	for _, a := range os.Args[1:] {
 		if a == "--tray" {
@@ -71,6 +63,7 @@ func main() {
 
 	loadConfig()
 	logf("NetSwitch %s запущен (администратор: %v)", appVersion, isAdmin())
+	platformStart()
 
 	var tb [16]byte
 	_, _ = rand.Read(tb[:])
@@ -84,6 +77,7 @@ func main() {
 	baseURL = fmt.Sprintf("http://127.0.0.1:%d/?t=%s", ln.Addr().(*net.TCPAddr).Port, token)
 	b, _ := json.Marshal(instanceInfo{URL: baseURL})
 	_ = os.WriteFile(filepath.Join(dataDir(), "instance.json"), b, 0600)
+	fixOwner(filepath.Join(dataDir(), "instance.json"))
 
 	sub, _ := fs.Sub(uiFS, "ui")
 	mux := http.NewServeMux()
@@ -130,8 +124,10 @@ func main() {
 		if err := syncDNSBypass(); err != nil {
 			logf("Исключения DNS: %v", err)
 		}
-		_, _, _ = zapretLatest(false)
-		refreshZapretStatus()
+		if zapretSupported {
+			_, _, _ = zapretLatest(false)
+			refreshZapretStatus()
+		}
 		_, _, _, _ = tgwsLatest(false)
 		refreshTgwsStatus()
 		updateTray()
@@ -172,22 +168,12 @@ func quit() {
 	os.Exit(0)
 }
 
-// openWindow открывает интерфейс отдельным окном Edge (режим приложения), иначе — в браузере.
-func openWindow(url string) {
-	for _, base := range []string{os.Getenv("ProgramFiles(x86)"), os.Getenv("ProgramFiles"), os.Getenv("LOCALAPPDATA")} {
-		if base == "" {
-			continue
-		}
-		edge := filepath.Join(base, "Microsoft", "Edge", "Application", "msedge.exe")
-		if _, err := os.Stat(edge); err == nil {
-			c := exec.Command(edge, "--app="+url, "--window-size=1180,800",
-				"--user-data-dir="+filepath.Join(dataDir(), "ui-profile"), "--no-first-run", "--disable-features=Translate")
-			if c.Start() == nil {
-				return
-			}
-		}
+// windowSize — размер окна интерфейса: компактный вид — узкое окно, как у телефона.
+func windowSize() (int, int) {
+	if getCfg().UICompact {
+		return 400, 780
 	}
-	openURL(url)
+	return 1180, 800
 }
 
 // guard — защита локального сервера: только 127.0.0.1 и только с токеном для API.

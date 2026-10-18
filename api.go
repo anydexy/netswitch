@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 )
 
@@ -36,6 +37,10 @@ func registerAPI(mux *http.ServeMux) {
 			if req.Method == "POST" {
 				_ = json.NewDecoder(req.Body).Decode(&r)
 			}
+			if !zapretSupported && strings.HasPrefix(path, "/api/zapret/") {
+				reply(w, nil, errors.New("zapret работает только в Windows"))
+				return
+			}
 			v, err := f(r)
 			reply(w, v, err)
 		})
@@ -43,7 +48,7 @@ func registerAPI(mux *http.ServeMux) {
 
 	h("/api/state", func(r apiReq) (any, error) {
 		s := snapshot()
-		return map[string]any{"app": s, "cfg": getCfg(), "zapret": getZapretStatus(), "tgws": getTgwsStatus(), "version": appVersion, "admin": isAdmin()}, nil
+		return map[string]any{"app": s, "cfg": getCfg(), "zapret": getZapretStatus(), "tgws": getTgwsStatus(), "version": appVersion, "admin": isAdmin(), "platform": runtime.GOOS}, nil
 	})
 	h("/api/refresh", func(r apiReq) (any, error) {
 		if r.ID != "" {
