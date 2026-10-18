@@ -5,6 +5,7 @@ package main
 // Заглушки для сборки/тестов не под Windows и не под macOS.
 
 import (
+	"archive/zip"
 	"errors"
 	"net/http"
 	"os"
@@ -15,6 +16,7 @@ import (
 const (
 	zapretSupported = false
 	tgwsAsset       = ""
+	updateAsset     = ""
 )
 
 var errUnsupported = errors.New("не поддерживается в этой системе")
@@ -80,3 +82,7 @@ func zapretTestRun(strategy string) (func() *http.Client, error) {
 	return nil, errUnsupported
 }
 func zapretTestKill() {}
+
+func updateApply(z *zip.Reader) error { return errUnsupported }
+func releaseInstance()                {}
+func detachCmd(c *exec.Cmd)           {}

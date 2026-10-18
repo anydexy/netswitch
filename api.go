@@ -48,7 +48,7 @@ func registerAPI(mux *http.ServeMux) {
 
 	h("/api/state", func(r apiReq) (any, error) {
 		s := snapshot()
-		return map[string]any{"app": s, "cfg": getCfg(), "zapret": getZapretStatus(), "tgws": getTgwsStatus(), "version": appVersion, "admin": isAdmin(), "platform": runtime.GOOS}, nil
+		return map[string]any{"app": s, "cfg": getCfg(), "zapret": getZapretStatus(), "tgws": getTgwsStatus(), "version": appVersion, "admin": isAdmin(), "platform": runtime.GOOS, "update": getUpdateStatus()}, nil
 	})
 	h("/api/refresh", func(r apiReq) (any, error) {
 		if r.ID != "" {
@@ -308,6 +308,16 @@ func registerAPI(mux *http.ServeMux) {
 		if strings.HasPrefix(r.URL, "https://") {
 			openURL(r.URL)
 		}
+		return nil, nil
+	})
+	// --- обновление NetSwitch ---
+	h("/api/update/check", func(r apiReq) (any, error) { return updateCheck() })
+	h("/api/update/install", func(r apiReq) (any, error) {
+		if getUpdateStatus().Busy {
+			return nil, errors.New("обновление уже идёт")
+		}
+		setUpdate(func(u *UpdateStatus) { u.Busy, u.Msg, u.Err = true, "Запуск обновления…", "" })
+		go func() { _ = updateInstall() }()
 		return nil, nil
 	})
 	h("/api/exit", func(r apiReq) (any, error) {

@@ -209,6 +209,8 @@ func launchdPlist(label string, args []string) string {
 	sb.WriteString(`	</array>
 	<key>RunAtLoad</key>
 	<true/>
+	<key>AbandonProcessGroup</key>
+	<true/>
 </dict>
 </plist>
 `)

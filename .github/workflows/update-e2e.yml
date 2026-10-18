@@ -1,0 +1,105 @@
+# Проверка автообновления на последний релиз: собирается NetSwitch с версией from,
+# запускается, ставит обновление с GitHub и перезапускается. Проверяется, что новая версия
+# отвечает на том же адресе и что файлы совпадают с файлами релиза.
+name: Update e2e
+
+on:
+  workflow_dispatch:
+    inputs:
+      from:
+        description: 'Версия, с которой обновляться'
+        default: '1.0.0'
+
+permissions:
+  contents: read
+
+jobs:
+  macos:
+    runs-on: macos-14
+    env:
+      FROM: ${{ inputs.from }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.7'
+          cache: false
+      - name: Старая версия в ~/Applications
+        run: |
+          set -euo pipefail
+          go run ./tools/macapp -version "$FROM" -appversion "$FROM" -out "$RUNNER_TEMP/old"
+          ditto -x -k "$RUNNER_TEMP/old/NetSwitch-mac.zip" "$RUNNER_TEMP/x"
+          mkdir -p ~/Applications
+          cp -R "$RUNNER_TEMP/x/NetSwitch/NetSwitch.app" ~/Applications/
+      - name: Обновление
+        run: |
+          set -euo pipefail
+          LATEST=$(curl -sf https://api.github.com/repos/${{ github.repository }}/releases/latest | jq -r .tag_name | sed 's/^v//')
+          echo "Последний релиз: $LATEST"
+          APP=~/Applications/NetSwitch.app
+          BIN=$APP/Contents/MacOS/NetSwitch
+          DATA="$HOME/Library/Application Support/NetSwitch"
+          sudo "$BIN" --tray --uid "$(id -u)" --gid "$(id -g)" --home "$HOME" >/tmp/ns.out 2>&1 &
+          for i in $(seq 60); do [ -s "$DATA/instance.json" ] && break; sleep 1; done
+          URL=$(jq -r .url "$DATA/instance.json"); BASE=${URL%%/\?*}; T=${URL##*t=}
+          api() { curl -sfS -X POST -H "X-Token: $T" -d '{}' "$BASE$1"; }
+          api /api/state | jq '.data | {version, update}'
+          api /api/update/install | jq -c .
+          ok=
+          for i in $(seq 180); do
+            v=$(api /api/state 2>/dev/null | jq -r .data.version || true)
+            [ "$v" = "$LATEST" ] && ok=1 && break
+            sleep 1
+          done
+          cat "$DATA/netswitch.log"
+          [ -n "$ok" ] || { echo "::error::версия не сменилась на $LATEST"; exit 1; }
+          echo "Новая версия отвечает на том же адресе"
+          curl -sfL "https://github.com/${{ github.repository }}/releases/download/v$LATEST/NetSwitch-mac.zip" -o "$RUNNER_TEMP/new.zip"
+          ditto -x -k "$RUNNER_TEMP/new.zip" "$RUNNER_TEMP/new"
+          cmp "$BIN" "$RUNNER_TEMP/new/NetSwitch/NetSwitch.app/Contents/MacOS/NetSwitch"
+          [ "$(defaults read "$APP/Contents/Info" CFBundleShortVersionString)" = "$LATEST" ]
+          [ "$(stat -f %Su "$BIN")" = "$(id -un)" ]
+          ls -la "$APP/Contents/MacOS"
+          api /api/exit || true
+
+  windows:
+    runs-on: windows-latest
+    env:
+      FROM: ${{ inputs.from }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.7'
+          cache: false
+      - name: Старая версия
+        run: go build -trimpath -ldflags "-H=windowsgui -s -w -X main.appVersion=$env:FROM" -o C:\e2e\NetSwitch.exe .
+      - name: Обновление
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $latest = (Invoke-RestMethod "https://api.github.com/repos/${{ github.repository }}/releases/latest").tag_name.TrimStart('v')
+          "Последний релиз: $latest"
+          Start-Process C:\e2e\NetSwitch.exe -ArgumentList '--tray'
+          $inst = "$env:LOCALAPPDATA\NetSwitch\instance.json"
+          for ($i = 0; $i -lt 60 -and -not (Test-Path $inst); $i++) { Start-Sleep 1 }
+          $url = (Get-Content $inst | ConvertFrom-Json).url
+          $base = $url.Split('?')[0].TrimEnd('/'); $tok = $url.Split('t=')[-1]
+          function Api($p) { Invoke-RestMethod -Method Post -Uri "$base$p" -Headers @{ 'X-Token' = $tok } -Body '{}' -ContentType 'application/json' -TimeoutSec 10 }
+          (Api '/api/state').data | Select-Object version, admin | Format-List
+          Api '/api/update/install' | ConvertTo-Json -Compress
+          $ok = $false
+          for ($i = 0; $i -lt 180; $i++) {
+            try { if ((Api '/api/state').data.version -eq $latest) { $ok = $true; break } } catch {}
+            Start-Sleep 1
+          }
+          Get-Content C:\e2e\netswitch.log -Encoding UTF8
+          if (-not $ok) { throw "версия не сменилась на $latest" }
+          "Новая версия отвечает на том же адресе"
+          Invoke-WebRequest "https://github.com/${{ github.repository }}/releases/download/v$latest/NetSwitch-windows.zip" -OutFile "$env:RUNNER_TEMP\new.zip"
+          Expand-Archive "$env:RUNNER_TEMP\new.zip" "$env:RUNNER_TEMP\new"
+          $a = (Get-FileHash C:\e2e\NetSwitch.exe).Hash; $b = (Get-FileHash "$env:RUNNER_TEMP\new\NetSwitch\NetSwitch.exe").Hash
+          if ($a -ne $b) { throw "NetSwitch.exe не совпадает с файлом релиза" }
+          if (Test-Path C:\e2e\NetSwitch.exe.old) { throw "остался NetSwitch.exe.old" }
+          Get-ChildItem C:\e2e
+          try { Api '/api/exit' } catch {}

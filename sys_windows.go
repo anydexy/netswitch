@@ -169,6 +169,8 @@ func postToProcWindows(pids map[uint32]bool, prefix, suffix string, msg uint32) 
 	return n
 }
 
+var instanceMutex uintptr
+
 // claimInstance — занять мьютекс; false, если кто-то успел раньше.
 func claimInstance() bool {
 	h, _, err := procCreateMutexW.Call(0, 0, uintptr(unsafe.Pointer(u16(mutexName))))
@@ -178,7 +180,16 @@ func claimInstance() bool {
 	if errno, ok := err.(syscall.Errno); ok && errno == 183 {
 		return false
 	}
+	instanceMutex = h
 	return true
+}
+
+// releaseInstance отдаёт мьютекс — перед запуском новой версии после обновления.
+func releaseInstance() {
+	if instanceMutex != 0 {
+		procCloseHandle.Call(instanceMutex)
+		instanceMutex = 0
+	}
 }
 
 func openURL(u string) {

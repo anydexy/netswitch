@@ -14,7 +14,9 @@ import (
 	"time"
 )
 
-const appVersion = "1.4.0"
+// appVersion — переменная, чтобы для проверки обновления можно было собрать «старую» версию:
+// go build -ldflags "-X main.appVersion=1.0.0".
+var appVersion = "1.4.1"
 
 //go:embed ui
 var uiFS embed.FS
@@ -22,6 +24,7 @@ var uiFS embed.FS
 var (
 	token   string
 	baseURL string
+	httpLn  net.Listener
 )
 
 // dataDir, appDir, openWindow и прочее, что зависит от системы, — в app_windows.go и sys_darwin.go.
@@ -32,11 +35,20 @@ type instanceInfo struct {
 
 func main() {
 	platformInit()
-	trayOnly := false
+	trayOnly, updated := false, false
 	for _, a := range os.Args[1:] {
-		if a == "--tray" {
+		switch a {
+		case "--tray":
 			trayOnly = true
+		case "--updated":
+			updated = true
 		}
+	}
+	// после обновления: дождаться выхода прежней версии и занять её порт с тем же токеном
+	var oldPort int
+	var oldToken string
+	if updated {
+		oldPort, oldToken = updatedRestart()
 	}
 
 	// Уже запущено — просто открыть окно.
@@ -64,16 +76,27 @@ func main() {
 	loadConfig()
 	logf("NetSwitch %s запущен (администратор: %v)", appVersion, isAdmin())
 	platformStart()
+	updateCleanup()
 
 	var tb [16]byte
 	_, _ = rand.Read(tb[:])
 	token = hex.EncodeToString(tb[:])
 
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		fmt.Println(err)
-		return
+	var ln net.Listener
+	var err error
+	reused := false
+	if oldPort > 0 && len(oldToken) == 32 {
+		if ln, err = net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", oldPort)); err == nil {
+			token, reused = oldToken, true
+		}
 	}
+	if !reused {
+		if ln, err = net.Listen("tcp", "127.0.0.1:0"); err != nil {
+			fmt.Println(err)
+			return
+		}
+	}
+	httpLn = ln
 	baseURL = fmt.Sprintf("http://127.0.0.1:%d/?t=%s", ln.Addr().(*net.TCPAddr).Port, token)
 	b, _ := json.Marshal(instanceInfo{URL: baseURL})
 	_ = os.WriteFile(filepath.Join(dataDir(), "instance.json"), b, 0600)
@@ -140,8 +163,13 @@ func main() {
 		}
 	}()
 	go autoLoop()
+	go updateLoop()
 
-	if !trayOnly {
+	if updated {
+		logf("NetSwitch обновлён до версии %s", appVersion)
+		trayBalloon("NetSwitch", "Обновлено до версии "+appVersion)
+	}
+	if !trayOnly && !reused { // после обновления открытое окно переподключится само
 		openWindow(baseURL)
 	}
 	select {}

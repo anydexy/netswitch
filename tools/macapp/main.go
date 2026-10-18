@@ -29,6 +29,7 @@ func main() {
 	version := flag.String("version", "", "версия программы, например 1.4.0")
 	out := flag.String("out", "dist", "папка для результата")
 	readme := flag.String("readme", "", "README.txt, который положить в архив рядом с NetSwitch.app")
+	appver := flag.String("appversion", "", "подменить версию внутри программы (для проверки обновления)")
 	flag.Parse()
 	if *version == "" {
 		fail("нужен -version")
@@ -41,7 +42,7 @@ func main() {
 	var slices [][]byte
 	for _, arch := range []string{"amd64", "arm64"} {
 		bin := filepath.Join(*out, "NetSwitch-darwin-"+arch)
-		build(arch, bin)
+		build(arch, bin, *appver)
 		b, err := os.ReadFile(bin)
 		if err != nil {
 			fail(err.Error())
@@ -111,9 +112,13 @@ func commitTime() time.Time {
 	return time.Unix(sec, 0).UTC()
 }
 
-func build(arch, out string) {
+func build(arch, out, appver string) {
 	gobin := filepath.Join(runtime.GOROOT(), "bin", "go")
-	c := exec.Command(gobin, "build", "-trimpath", "-ldflags", "-s -w", "-o", out, ".")
+	ld := "-s -w"
+	if appver != "" {
+		ld += " -X main.appVersion=" + appver
+	}
+	c := exec.Command(gobin, "build", "-trimpath", "-ldflags", ld, "-o", out, ".")
 	c.Env = append(os.Environ(), "GOOS=darwin", "GOARCH="+arch, "CGO_ENABLED=0")
 	c.Stdout, c.Stderr = os.Stdout, os.Stderr
 	if err := c.Run(); err != nil {

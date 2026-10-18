@@ -46,6 +46,8 @@ type Settings struct {
 	UITheme   string `json:"ui_theme"`   // auto | light | dark
 	UICompact bool   `json:"ui_compact"` // компактный вид: узкое окно, только главное
 
+	ManualUpdate bool `json:"update_manual"` // не ставить обновления сами — только сообщать о них
+
 	Active string `json:"active"` // id активного способа
 
 	SeenDefaults []string `json:"seen_defaults"` // стандартные способы, которые уже добавлялись (новые в обновлениях добавятся сами)
