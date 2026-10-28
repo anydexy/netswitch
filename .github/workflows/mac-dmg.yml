@@ -1,0 +1,41 @@
+# NetSwitch-mac.dmg для релиза: та же NetSwitch.app, что в NetSwitch-mac.zip из релиза (zip
+# остаётся для автообновления), плюс ярлык «Программы» для перетаскивания и инструкция.
+# hdiutil есть только в macOS, поэтому образ собирается здесь и прикрепляется к релизу.
+name: mac dmg
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Тег релиза, например v1.5.0'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  dmg:
+    runs-on: macos-14
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+    steps:
+      - name: Образ
+        run: |
+          set -euo pipefail
+          gh release download "$TAG" --repo "${{ github.repository }}" -p NetSwitch-mac.zip -D in
+          ditto -x -k in/NetSwitch-mac.zip x
+          mkdir dmg
+          cp -R x/NetSwitch/NetSwitch.app dmg/
+          cp x/NetSwitch/README.txt "dmg/Прочитай меня.txt"
+          ln -s /Applications dmg/Программы
+          hdiutil create -volname "NetSwitch ${TAG#v}" -srcfolder dmg -fs HFS+ -format UDZO -ov NetSwitch-mac.dmg
+          hdiutil verify NetSwitch-mac.dmg
+          # в образе та же программа, что в zip
+          hdiutil attach -nobrowse -readonly -mountpoint mnt NetSwitch-mac.dmg
+          cmp mnt/NetSwitch.app/Contents/MacOS/NetSwitch x/NetSwitch/NetSwitch.app/Contents/MacOS/NetSwitch
+          hdiutil detach mnt
+          shasum -a 256 NetSwitch-mac.dmg
+          gh release upload "$TAG" NetSwitch-mac.dmg --clobber --repo "${{ github.repository }}"
