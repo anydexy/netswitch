@@ -30,6 +30,7 @@ jobs:
           mkdir dmg
           cp -R x/NetSwitch/NetSwitch.app dmg/
           cp x/NetSwitch/README.txt "dmg/Прочитай меня.txt"
+          if [ -f x/NetSwitch/THIRD_PARTY_LICENSES.txt ]; then cp x/NetSwitch/THIRD_PARTY_LICENSES.txt dmg/; fi
           ln -s /Applications dmg/Программы
           hdiutil create -volname "NetSwitch ${TAG#v}" -srcfolder dmg -fs HFS+ -format UDZO -ov NetSwitch-mac.dmg
           hdiutil verify NetSwitch-mac.dmg
